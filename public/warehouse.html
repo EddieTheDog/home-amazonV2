@@ -1,3 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Warehouse - Laptop</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; }
+h1 { color: #333; }
+label { display: block; margin: 8px 0; }
+input { padding: 5px; width: 250px; margin-bottom: 5px; }
+button { padding: 6px 12px; margin-right: 5px; margin-top: 10px; }
+#status { margin-top: 10px; font-weight: bold; }
+#scans { background: #f5f5f5; padding: 10px; margin-top: 20px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; }
+</style>
+</head>
+<body>
 <h1>Warehouse - Laptop</h1>
 
 <label>Session ID: <input type="text" id="sessionKey"></label>
@@ -6,29 +22,33 @@
 <button id="startSession">Start Session</button>
 <button id="endSession">End Session</button>
 
-<h2>Status</h2>
 <div id="status">No active session</div>
 
 <h2>Scanned Packages</h2>
-<div id="scans"></div>
+<div id="scans">Waiting for scans...</div>
 
 <script>
 let sessionActive = false;
 let sessionKey = null;
+let employee = null;
+let location = null;
 
 document.getElementById('startSession').addEventListener('click', () => {
   sessionKey = document.getElementById('sessionKey').value.trim();
-  const employee = document.getElementById('employee').value.trim();
-  const location = document.getElementById('location').value.trim();
-  if(!sessionKey || !employee || !location) return alert("Fill all fields");
+  employee = document.getElementById('employee').value.trim();
+  location = document.getElementById('location').value.trim();
+  if (!sessionKey || !employee || !location) return alert("Fill all fields");
   sessionActive = true;
   document.getElementById('status').textContent = `Session ${sessionKey} started`;
   document.getElementById('scans').textContent = "Waiting for scans...";
 });
 
 document.getElementById('endSession').addEventListener('click', () => {
-  if(!sessionActive) return;
+  if (!sessionActive) return;
   sessionActive = false;
   document.getElementById('status').textContent = `Session ${sessionKey} ended`;
+  document.getElementById('scans').textContent += "\nSession ended.";
 });
 </script>
+</body>
+</html>
