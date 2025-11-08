@@ -18,9 +18,14 @@
 const form = document.getElementById('trackForm');
 const result = document.getElementById('result');
 
+// Auto-fill from query string
+const params = new URLSearchParams(window.location.search);
+const barcodeInput = document.getElementById('barcode');
+if (params.has('barcode')) barcodeInput.value = params.get('barcode');
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
-  const barcode = document.getElementById('barcode').value;
+  const barcode = barcodeInput.value;
   const res = await fetch('/api/package/' + barcode);
   const json = await res.json();
   result.textContent = JSON.stringify(json, null, 2);
