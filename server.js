@@ -1,113 +1,151 @@
-const express = require("express");
-const bodyParser = require("body-parser");
-const fs = require("fs");
-const path = require("path");
+import express from "express";
+import bodyParser from "body-parser";
+import fs from "fs";
+import path from "path";
+import crypto from "crypto";
+import QRCode from "qrcode";
+import bwipjs from "bwip-js";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 const app = express();
-app.use(bodyParser.json());
-app.use(express.static("public"));
+const PORT = process.env.PORT || 3000;
 
 const packagesFile = path.join(__dirname, "packages.json");
+const keysFile = path.join(__dirname, "keys.json");
 
-// --- Utility functions ---
-function readPackages() {
-  if (!fs.existsSync(packagesFile)) return [];
-  return JSON.parse(fs.readFileSync(packagesFile));
+app.use(bodyParser.json());
+app.use(express.static(path.join(__dirname, "public")));
+
+// Ensure data files exist
+if (!fs.existsSync(packagesFile)) fs.writeFileSync(packagesFile, JSON.stringify([]));
+if (!fs.existsSync(keysFile)) fs.writeFileSync(keysFile, JSON.stringify([]));
+
+const readPackages = () => JSON.parse(fs.readFileSync(packagesFile));
+const writePackages = (data) => fs.writeFileSync(packagesFile, JSON.stringify(data, null, 2));
+const readKeys = () => JSON.parse(fs.readFileSync(keysFile));
+const writeKeys = (data) => fs.writeFileSync(keysFile, JSON.stringify(data, null, 2));
+
+function generateBarcode() {
+  return crypto.randomBytes(4).toString("hex");
 }
 
-function writePackages(pkgs) {
-  fs.writeFileSync(packagesFile, JSON.stringify(pkgs, null, 2));
+function generateTrackingNumber() {
+  return "TRK-" + Math.floor(100000 + Math.random() * 900000);
 }
 
-// --- Session management ---
-let activeSessions = {}; // sessionKey -> { employee, location, scans: [] }
+// Friendly URLs
+app.get("/frontdesk", (req, res) => res.sendFile(path.join(__dirname, "public", "frontdesk.html")));
+app.get("/warehouse", (req, res) => res.sendFile(path.join(__dirname, "public", "warehouse.html")));
+app.get("/scan", (req, res) => res.sendFile(path.join(__dirname, "public", "scan.html")));
+app.get("/store-support", (req, res) => res.sendFile(path.join(__dirname, "public", "store-support.html")));
+app.get("/urls", (req, res) => res.sendFile(path.join(__dirname, "public", "urls.html")));
+app.get("/tracking/:trackingNumber", (req, res) => res.sendFile(path.join(__dirname, "public", "tracking.html")));
 
-// --- API: Create Package ---
+// Test
+app.get("/api/test", (req, res) => res.json({ message: "Home Amazon V2 running ✅" }));
+
+// Barcode endpoint
+app.get("/api/barcode/:code", async (req, res) => {
+  try {
+    bwipjs.toBuffer({
+      bcid: "code128",
+      text: req.params.code,
+      scale: 3,
+      height: 10,
+      includetext: true,
+      textxalign: "center",
+    }, (err, png) => {
+      if (err) return res.status(500).send("Error generating barcode");
+      res.type("image/png");
+      res.send(png);
+    });
+  } catch {
+    res.status(500).send("Server error");
+  }
+});
+
+// QR Code endpoint
+app.get("/api/qrcode/:code", async (req, res) => {
+  try {
+    const url = `${req.protocol}://${req.get('host')}/tracking/${req.params.code}`;
+    const qr = await QRCode.toDataURL(url);
+    const base64Data = qr.replace(/^data:image\/png;base64,/, "");
+    const imgBuffer = Buffer.from(base64Data, "base64");
+    res.type("image/png");
+    res.send(imgBuffer);
+  } catch {
+    res.status(500).send("Error generating QR code");
+  }
+});
+
+// Create package
 app.post("/api/package/create", (req, res) => {
-  const { customerName, recipientName, destination } = req.body;
+  const { customerName, recipientName, destination, details } = req.body;
+  if (!customerName || !recipientName || !destination)
+    return res.status(400).json({ error: "Missing required fields" });
+
   const packages = readPackages();
-  const packageId = Math.random().toString(16).substr(2, 8);
-  const trackingNumber = Math.random().toString(36).substr(2, 8).toUpperCase();
-  const pkg = {
-    packageId,
+  const barcode = generateBarcode();
+  const trackingNumber = generateTrackingNumber();
+  const barcodeUrl = `/api/barcode/${barcode}`;
+  const qrUrl = `/api/qrcode/${barcode}`;
+
+  const newPackage = {
+    packageId: barcode,
     trackingNumber,
     customerName,
     recipientName,
     destination,
-    currentInternalStatus: "created",
+    details: details || {},
+    barcodeUrl,
+    qrUrl,
     currentPublicStatus: "Order Created",
     checkpoints: [
-      {
-        order: 1,
-        locationName: "Front Desk",
-        timestamp: new Date(),
-        internalStatus: "created",
-        publicStatus: "Order Created",
-        notes: ""
-      }
+      { order: 1, locationName: "Front Desk", publicStatus: "Order Created", timestamp: new Date() }
     ]
   };
-  packages.push(pkg);
+
+  packages.push(newPackage);
   writePackages(packages);
-  res.json({ message: "Package created", package: pkg });
+
+  res.json({ message: "Package created", package: newPackage });
 });
 
-// --- API: Start Session ---
-app.post("/api/session/start", (req, res) => {
-  const { sessionKey, employee, location } = req.body;
-  if (!sessionKey || !employee || !location)
-    return res.status(400).json({ error: "Missing required fields" });
-  activeSessions[sessionKey] = { employee, location, scans: [] };
-  res.json({ message: `Session ${sessionKey} started` });
-});
-
-// --- API: End Session ---
-app.post("/api/session/end", (req, res) => {
-  const { sessionKey } = req.body;
-  if (!sessionKey || !activeSessions[sessionKey])
-    return res.status(400).json({ error: "Session does not exist" });
-  delete activeSessions[sessionKey];
-  res.json({ message: `Session ${sessionKey} ended` });
-});
-
-// --- API: Scan Package ---
+// Scan package (update status)
 app.post("/api/package/scan", (req, res) => {
   const { sessionKey, barcode, action, location, employee, notes } = req.body;
   if (!sessionKey || !barcode || !action || !location || !employee)
     return res.status(400).json({ error: "Missing required fields" });
 
-  // Check if session exists
-  if (!activeSessions[sessionKey])
-    return res.status(400).json({ error: "Session does not exist or ended" });
-
   const packages = readPackages();
   const pkg = packages.find(p => p.packageId === barcode);
   if (!pkg) return res.status(404).json({ error: "Package not found" });
 
-  // Update package
   pkg.currentPublicStatus = action;
-  const checkpoint = {
+
+  pkg.checkpoints.push({
     order: pkg.checkpoints.length + 1,
     locationName: location,
     timestamp: new Date(),
     scannedBy: employee,
     publicStatus: action,
-    notes: notes || "",
-    sessionKey
-  };
-  pkg.checkpoints.push(checkpoint);
+    notes: notes || ""
+  });
+
   writePackages(packages);
-
-  // Store scan in session
-  activeSessions[sessionKey].scans.push({ barcode, action, timestamp: new Date() });
-
   res.json({ message: "Package updated", package: pkg });
 });
 
-// --- API: Get active session scans ---
-app.get("/api/session/:sessionKey/scans", (req, res) => {
-  const session = activeSessions[req.params.sessionKey];
-  if (!session) return res.status(404).json({ error: "Session not found" });
-  res.json({ scans: session.scans });
+// Get package by tracking number
+app.get("/api/package/tracking/:trackingNumber", (req, res) => {
+  const packages = readPackages();
+  const pkg = packages.find(p => p.trackingNumber === req.params.trackingNumber);
+  if (!pkg) return res.status(404).json({ error: "Package not found" });
+  res.json(pkg);
 });
 
-app.listen(3000, () => console.log("Server running on port 3000"));
+app.listen(PORT, () => console.log(`🚀 Home Amazon V2 running on port ${PORT}`));
