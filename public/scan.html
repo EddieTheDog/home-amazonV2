@@ -2,72 +2,73 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Warehouse - Phone Scan</title>
-<script src="https://unpkg.com/html5-qrcode"></script>
+<title>Warehouse Scanner</title>
 <style>
 body { font-family: Arial, sans-serif; margin: 20px; }
 h1 { color: #333; }
 label { display: block; margin: 8px 0; }
-input { padding: 5px; width: 200px; margin-bottom: 5px; }
-button { padding: 6px 12px; margin-bottom: 10px; }
-#status { font-weight: bold; margin-bottom: 10px; }
-#reader { width: 300px; margin-top: 20px; }
-#result { background: #f5f5f5; padding: 10px; margin-top: 10px; white-space: pre-wrap; max-height: 300px; overflow-y: auto; }
+input { padding: 5px; width: 250px; margin-bottom: 5px; }
+button { padding: 6px 12px; margin-top: 10px; margin-right: 5px; }
+#status { margin-top: 10px; font-weight: bold; }
 </style>
 </head>
 <body>
-<h1>Warehouse - Phone Scan</h1>
+<h1>Warehouse Scanner</h1>
 
-<label>Session ID: <input type="text" id="sessionKey"></label>
+<label>Session Key: <input type="text" id="sessionKey"></label>
 <button id="connectSession">Connect Session</button>
 <div id="status">Not connected</div>
-<div id="reader"></div>
-<pre id="result">Waiting for session...</pre>
+
+<label>Scan Barcode:</label>
+<input type="text" id="barcodeInput" placeholder="Scan barcode here" disabled>
+<button id="sendScan" disabled>Send Scan</button>
 
 <script>
+let sessionConnected = false;
 let sessionKey = null;
-let connected = false;
 
-document.getElementById('connectSession').addEventListener('click', async () => {
+// Connect to session
+document.getElementById('connectSession').addEventListener('click', () => {
   sessionKey = document.getElementById('sessionKey').value.trim();
-  if (!sessionKey) return alert("Enter a session ID");
+  if (!sessionKey) return alert("Enter a session key");
+  sessionConnected = true;
+  document.getElementById('status').textContent = `Connected to session ${sessionKey}`;
+  document.getElementById('barcodeInput').disabled = false;
+  document.getElementById('sendScan').disabled = false;
+});
 
-  // Check if session exists
-  const res = await fetch('/api/session/check', {
+// Send scan to warehouse
+document.getElementById('sendScan').addEventListener('click', async () => {
+  if (!sessionConnected) return alert("Connect to a session first");
+
+  const barcode = document.getElementById('barcodeInput').value.trim();
+  if (!barcode) return alert("Scan a barcode");
+
+  // Send to server (updates warehouse package)
+  const res = await fetch('/api/package/scan', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionKey })
+    body: JSON.stringify({
+      sessionKey,
+      barcode,
+      action: 'scanned',
+      location: 'Phone Scanner',
+      employee: 'Scanner Device'
+    })
   });
+
   const data = await res.json();
-  if (!res.ok) return alert(data.error || "Session not found");
+  if (data.error) {
+    alert(`Error: ${data.error}`);
+  } else {
+    alert(`Scanned successfully!\nStatus: ${data.package.currentPublicStatus}`);
+    // Trigger a custom event for the laptop warehouse page
+    window.dispatchEvent(new CustomEvent('packageScanned', { detail: { barcode } }));
+  }
 
-  connected = true;
-  document.getElementById('status').textContent = `Connected to session ${sessionKey}`;
-  document.getElementById('result').textContent = "Scan packages now.";
-
-  new Html5Qrcode("reader").start(
-    { facingMode: "environment" },
-    { fps: 10, qrbox: 250 },
-    decodedText => {
-      if (!connected) return;
-      fetch('/api/package/scan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionKey,
-          barcode: decodedText,
-          action: 'scanned',
-          location: 'Warehouse Scan',
-          employee: 'Phone Scanner'
-        })
-      })
-      .then(res => res.json())
-      .then(json => {
-        const resultEl = document.getElementById('result');
-        resultEl.textContent = `Scanned: ${decodedText}\nStatus: ${json.package?.currentPublicStatus || 'Error'}\nTime: ${new Date().toLocaleTimeString()}\n\n` + resultEl.textContent;
-      });
-    }
-  );
+  // Clear input for next scan
+  document.getElementById('barcodeInput').value = '';
+  document.getElementById('barcodeInput').focus();
 });
 </script>
 </body>
