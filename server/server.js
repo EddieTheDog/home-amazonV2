@@ -1,25 +1,23 @@
 // server/server.js
 
 import express from "express";
-import path from "path";
-import { fileURLToPath } from "url";
 import bodyParser from "body-parser";
 import fs from "fs";
+import path from "path";
 import crypto from "crypto";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Paths
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const dataPath = path.join(__dirname, "../data/packages.json");
-const sessionPath = path.join(__dirname, "../data/keys.json");
+// Paths for data storage
+const dataPath = path.join(process.cwd(), "data/packages.json");
+const sessionPath = path.join(process.cwd(), "data/keys.json");
 
 // Middleware
 app.use(bodyParser.json());
 
 // Ensure data files exist
+if (!fs.existsSync("data")) fs.mkdirSync("data");
 if (!fs.existsSync(dataPath)) fs.writeFileSync(dataPath, JSON.stringify([]));
 if (!fs.existsSync(sessionPath)) fs.writeFileSync(sessionPath, JSON.stringify([]));
 
@@ -32,14 +30,18 @@ const writeSessions = (data) => fs.writeFileSync(sessionPath, JSON.stringify(dat
 
 const generateBarcode = () => crypto.randomBytes(4).toString("hex");
 
-// --- API Routes ---
+// --- API Endpoints ---
 
-// 1️⃣ Create a package
+// 1️⃣ Test route
+app.get("/api/test", (req, res) => {
+  res.json({ message: "Home Amazon V2 server running ✅" });
+});
+
+// 2️⃣ Create a new package
 app.post("/api/package/create", (req, res) => {
   const { customerName, recipientName, destination, details } = req.body;
-  if (!customerName || !recipientName || !destination) {
+  if (!customerName || !recipientName || !destination)
     return res.status(400).json({ error: "Missing required fields" });
-  }
 
   const packages = readData();
   const barcode = generateBarcode();
@@ -70,12 +72,11 @@ app.post("/api/package/create", (req, res) => {
   res.json({ message: "Package created", package: newPackage });
 });
 
-// 2️⃣ Scan a package
+// 3️⃣ Scan a package and update status
 app.post("/api/package/scan", (req, res) => {
   const { sessionKey, barcode, action, location, employee, notes } = req.body;
-  if (!sessionKey || !barcode || !action || !location || !employee) {
+  if (!sessionKey || !barcode || !action || !location || !employee)
     return res.status(400).json({ error: "Missing required fields" });
-  }
 
   const packages = readData();
   const pkg = packages.find(p => p.packageId === barcode);
@@ -84,7 +85,7 @@ app.post("/api/package/scan", (req, res) => {
   // Update internal status
   pkg.currentInternalStatus = action;
 
-  // Map internal to public status (simplified)
+  // Map internal to public status
   const publicMap = {
     created: "Order Created",
     in_store: "In Store Processing",
@@ -117,7 +118,7 @@ app.post("/api/package/scan", (req, res) => {
   res.json({ message: "Package updated", package: pkg });
 });
 
-// 3️⃣ Get package info by barcode
+// 4️⃣ Get package info by barcode
 app.get("/api/package/:barcode", (req, res) => {
   const { barcode } = req.params;
   const packages = readData();
@@ -126,15 +127,14 @@ app.get("/api/package/:barcode", (req, res) => {
   res.json(pkg);
 });
 
-// 4️⃣ Start a scanning session
+// 5️⃣ Start a scanning session
 app.post("/api/session/start", (req, res) => {
   const { key, role } = req.body;
   if (!key || !role) return res.status(400).json({ error: "Missing key or role" });
 
   const sessions = readSessions();
-  if (sessions.find(s => s.key === key)) {
+  if (sessions.find(s => s.key === key))
     return res.status(400).json({ error: "Key already exists" });
-  }
 
   const newSession = { key, role, devices: [], status: "active" };
   sessions.push(newSession);
@@ -142,26 +142,23 @@ app.post("/api/session/start", (req, res) => {
   res.json({ message: "Session started", session: newSession });
 });
 
-// 5️⃣ Join a scanning session
+// 6️⃣ Join a scanning session
 app.post("/api/session/join", (req, res) => {
   const { key, deviceName } = req.body;
-  if (!key || !deviceName) return res.status(400).json({ error: "Missing key or deviceName" });
+  if (!key || !deviceName)
+    return res.status(400).json({ error: "Missing key or deviceName" });
 
   const sessions = readSessions();
   const session = sessions.find(s => s.key === key && s.status === "active");
-  if (!session) return res.status(404).json({ error: "Session not found or inactive" });
+  if (!session)
+    return res.status(404).json({ error: "Session not found or inactive" });
 
-  session.devices.push(deviceName);
+  if (!session.devices.includes(deviceName)) session.devices.push(deviceName);
   writeSessions(sessions);
   res.json({ message: "Joined session", session });
 });
 
-// Default test route
-app.get("/api/test", (req, res) => {
-  res.json({ message: "Home Amazon V2 server running ✅" });
-});
-
-// Start server
+// Start the server
 app.listen(PORT, () => {
   console.log(`🚀 Home Amazon V2 running on port ${PORT}`);
 });
