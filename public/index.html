@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Home Amazon - Front Desk</title>
+</head>
+<body>
+<h1>Front Desk - Create Package</h1>
+
+<form id="createPackageForm">
+  <label>Customer Name: <input type="text" id="customerName" required></label><br>
+  <label>Recipient Name: <input type="text" id="recipientName" required></label><br>
+  <label>Destination: <input type="text" id="destination" required></label><br>
+  <button type="submit">Create Package</button>
+</form>
+
+<pre id="result"></pre>
+
+<script>
+const form = document.getElementById('createPackageForm');
+const result = document.getElementById('result');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const data = {
+    customerName: document.getElementById('customerName').value,
+    recipientName: document.getElementById('recipientName').value,
+    destination: document.getElementById('destination').value
+  };
+  const res = await fetch('/api/package/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  const json = await res.json();
+  result.textContent = JSON.stringify(json, null, 2);
+});
+</script>
+</body>
+</html>
