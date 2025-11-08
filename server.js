@@ -5,15 +5,20 @@ import path from "path";
 import crypto from "crypto";
 import QRCode from "qrcode";
 import bwipjs from "bwip-js";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const dataPath = path.join(process.cwd(), "packages.json");
-const sessionPath = path.join(process.cwd(), "keys.json");
+const dataPath = path.join(__dirname, "packages.json");
+const sessionPath = path.join(__dirname, "keys.json");
 
 app.use(bodyParser.json());
-app.use(express.static(path.join(process.cwd(), "public")));
+app.use(express.static(path.join(__dirname, "public")));
 
 // Ensure data files exist
 if (!fs.existsSync(dataPath)) fs.writeFileSync(dataPath, JSON.stringify([]));
@@ -26,10 +31,17 @@ const writeSessions = (data) => fs.writeFileSync(sessionPath, JSON.stringify(dat
 
 const generateBarcode = () => crypto.randomBytes(4).toString("hex");
 
-// Test endpoint
+// Friendly URL routes
+app.get("/frontdesk", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
+app.get("/warehouse", (req, res) => res.sendFile(path.join(__dirname, "public", "warehouse.html")));
+app.get("/tracking", (req, res) => res.sendFile(path.join(__dirname, "public", "tracking.html")));
+app.get("/store-support", (req, res) => res.sendFile(path.join(__dirname, "public", "store-support.html")));
+app.get("/urls", (req, res) => res.sendFile(path.join(__dirname, "public", "urls.html")));
+
+// Test
 app.get("/api/test", (req, res) => res.json({ message: "Home Amazon V2 running ✅" }));
 
-// Barcode image
+// Barcode
 app.get("/api/barcode/:code", async (req, res) => {
   try {
     bwipjs.toBuffer({
@@ -49,10 +61,10 @@ app.get("/api/barcode/:code", async (req, res) => {
   }
 });
 
-// QR code image
+// QR code
 app.get("/api/qrcode/:code", async (req, res) => {
   try {
-    const url = `${req.protocol}://${req.get('host')}/tracking.html?barcode=${req.params.code}`;
+    const url = `${req.protocol}://${req.get('host')}/tracking?barcode=${req.params.code}`;
     const qr = await QRCode.toDataURL(url);
     const base64Data = qr.replace(/^data:image\/png;base64,/, "");
     const imgBuffer = Buffer.from(base64Data, "base64");
@@ -116,7 +128,8 @@ app.post("/api/package/scan", (req, res) => {
     out_for_delivery: "Out for Delivery",
     delivered: "Delivered",
     failed_delivery: "Delivery Attempted",
-    returned_to_sender: "Returned to Sender"
+    returned_to_sender: "Returned to Sender",
+    scanned: "Scanned"
   };
   pkg.currentPublicStatus = publicMap[action] || "In Transit";
 
@@ -142,33 +155,6 @@ app.get("/api/package/:barcode", (req, res) => {
   const pkg = packages.find(p => p.packageId === req.params.barcode);
   if (!pkg) return res.status(404).json({ error: "Package not found" });
   res.json(pkg);
-});
-
-// Sessions
-app.post("/api/session/start", (req, res) => {
-  const { key, role } = req.body;
-  if (!key || !role) return res.status(400).json({ error: "Missing key or role" });
-
-  const sessions = readSessions();
-  if (sessions.find(s => s.key === key)) return res.status(400).json({ error: "Key already exists" });
-
-  const newSession = { key, role, devices: [], status: "active" };
-  sessions.push(newSession);
-  writeSessions(sessions);
-  res.json({ message: "Session started", session: newSession });
-});
-
-app.post("/api/session/join", (req, res) => {
-  const { key, deviceName } = req.body;
-  if (!key || !deviceName) return res.status(400).json({ error: "Missing key or deviceName" });
-
-  const sessions = readSessions();
-  const session = sessions.find(s => s.key === key && s.status === "active");
-  if (!session) return res.status(404).json({ error: "Session not found or inactive" });
-
-  if (!session.devices.includes(deviceName)) session.devices.push(deviceName);
-  writeSessions(sessions);
-  res.json({ message: "Joined session", session });
 });
 
 app.listen(PORT, () => console.log(`🚀 Home Amazon V2 running on port ${PORT}`));
