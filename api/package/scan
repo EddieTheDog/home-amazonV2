@@ -1,0 +1,24 @@
+app.post("/api/package/scan", (req, res) => {
+  const { sessionKey, barcode, action, location, employee, notes } = req.body;
+  if (!sessionKey || !barcode || !action || !location || !employee)
+    return res.status(400).json({ error: "Missing required fields" });
+
+  const packages = readPackages();
+  const pkg = packages.find(p => p.packageId === barcode);
+  if (!pkg) return res.status(404).json({ error: "Package not found" });
+
+  pkg.currentPublicStatus = action;
+
+  pkg.checkpoints.push({
+    order: pkg.checkpoints.length + 1,
+    locationName: location,
+    timestamp: new Date(),
+    scannedBy: employee,
+    publicStatus: action,
+    notes: notes || "",
+    sessionKey
+  });
+
+  writePackages(packages);
+  res.json({ message: "Package updated", package: pkg });
+});
