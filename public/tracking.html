@@ -3,31 +3,112 @@
 <head>
 <meta charset="UTF-8">
 <title>Package Tracking</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; }
+h1 { color: #333; }
+.progress-bar { display: flex; margin: 20px 0; }
+.progress-step { flex: 1; text-align: center; padding: 10px; border-top: 4px solid #ccc; position: relative; }
+.progress-step.active { border-top-color: #4CAF50; font-weight: bold; }
+.progress-step::before { content: ""; position: absolute; top: 50%; left: 0; width: 100%; height: 4px; background: #ccc; z-index: -1; }
+.progress-step:first-child::before { width: 50%; left: 50%; }
+.progress-step:last-child::before { width: 50%; }
+table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+th { background: #f0f0f0; }
+</style>
 </head>
 <body>
-<h1>Track Your Package</h1>
+<h1>Package Tracking</h1>
 
 <form id="trackForm">
-  <label>Barcode: <input type="text" id="barcode"></label>
+  <label>Tracking Number: <input type="text" id="trackingNumber"></label>
   <button type="submit">Track</button>
 </form>
 
-<pre id="result"></pre>
+<div id="packageInfo" style="display:none;">
+  <h2>Package Info</h2>
+  <p><strong>Customer:</strong> <span id="customerName"></span></p>
+  <p><strong>Recipient:</strong> <span id="recipientName"></span></p>
+  <p><strong>Destination:</strong> <span id="destination"></span></p>
+  <p><strong>Current Status:</strong> <span id="currentStatus"></span></p>
+  
+  <div class="progress-bar" id="progressBar"></div>
+
+  <h3>History</h3>
+  <table id="checkpointTable">
+    <tr>
+      <th>Order</th>
+      <th>Location</th>
+      <th>Status</th>
+      <th>Time</th>
+      <th>Notes</th>
+    </tr>
+  </table>
+</div>
 
 <script>
-const result = document.getElementById('result');
-const barcodeInput = document.getElementById('barcode');
+const trackForm = document.getElementById('trackForm');
+const trackingNumberInput = document.getElementById('trackingNumber');
+const packageInfo = document.getElementById('packageInfo');
+const customerNameEl = document.getElementById('customerName');
+const recipientNameEl = document.getElementById('recipientName');
+const destinationEl = document.getElementById('destination');
+const currentStatusEl = document.getElementById('currentStatus');
+const progressBar = document.getElementById('progressBar');
+const checkpointTable = document.getElementById('checkpointTable');
 
-const params = new URLSearchParams(window.location.search);
-if (params.has('barcode')) barcodeInput.value = params.get('barcode');
+const stages = ["Order Created", "In Store Processing", "In Transit", "Out for Delivery", "Delivered"];
 
-document.getElementById('trackForm').addEventListener('submit', async e => {
+async function loadPackage(trackingNumber) {
+  const res = await fetch(`/api/package/tracking/${trackingNumber}`);
+  if (!res.ok) {
+    alert("Tracking number not found");
+    return;
+  }
+  const pkg = await res.json();
+  customerNameEl.textContent = pkg.customerName;
+  recipientNameEl.textContent = pkg.recipientName;
+  destinationEl.textContent = pkg.destination;
+  currentStatusEl.textContent = pkg.currentPublicStatus;
+
+  // Progress bar
+  progressBar.innerHTML = "";
+  stages.forEach(stage => {
+    const div = document.createElement("div");
+    div.className = "progress-step";
+    if (stages.indexOf(stage) <= stages.indexOf(pkg.currentPublicStatus)) div.classList.add("active");
+    div.textContent = stage;
+    progressBar.appendChild(div);
+  });
+
+  // Checkpoint table
+  const tableRows = pkg.checkpoints.map(cp => `
+    <tr>
+      <td>${cp.order}</td>
+      <td>${cp.locationName}</td>
+      <td>${cp.publicStatus}</td>
+      <td>${new Date(cp.timestamp).toLocaleString()}</td>
+      <td>${cp.notes || ""}</td>
+    </tr>`).join("");
+  checkpointTable.innerHTML = `<tr>
+      <th>Order</th><th>Location</th><th>Status</th><th>Time</th><th>Notes</th>
+    </tr>` + tableRows;
+
+  packageInfo.style.display = "block";
+}
+
+trackForm.addEventListener("submit", e => {
   e.preventDefault();
-  const barcode = barcodeInput.value;
-  const res = await fetch(`/api/package/${barcode}`);
-  const json = await res.json();
-  result.textContent = JSON.stringify(json, null, 2);
+  loadPackage(trackingNumberInput.value.trim());
 });
+
+// Auto-load if URL has tracking number
+const urlParts = window.location.pathname.split("/");
+if (urlParts.length === 3) {
+  const tn = urlParts[2];
+  trackingNumberInput.value = tn;
+  loadPackage(tn);
+}
 </script>
 </body>
 </html>
