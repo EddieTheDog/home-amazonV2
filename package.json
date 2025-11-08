@@ -1,7 +1,7 @@
 {
   "name": "home-amazonV2",
   "version": "1.0.0",
-  "description": "Backend for Home Amazon V2",
+  "description": "Home Amazon V2",
   "type": "module",
   "main": "server.js",
   "scripts": {
