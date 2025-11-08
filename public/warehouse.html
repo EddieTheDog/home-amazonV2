@@ -1,93 +1,97 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Warehouse - Laptop</title>
-<style>
-body { font-family: Arial, sans-serif; margin: 20px; }
-button { margin: 5px; padding: 6px 12px; }
-#status { font-weight: bold; margin-top: 10px; }
-#scans { margin-top: 20px; max-height: 400px; overflow-y: auto; background: #f5f5f5; padding: 10px; white-space: pre-wrap; }
-</style>
+  <meta charset="UTF-8">
+  <title>Warehouse - Home Amazon V2</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    #scans { margin-top: 20px; max-height: 400px; overflow-y: auto; }
+    .scan-entry { padding: 10px; border-bottom: 1px solid #ccc; }
+    button { margin: 5px; padding: 10px; }
+  </style>
 </head>
 <body>
-<h1>Warehouse - Laptop</h1>
+  <h1>Warehouse Dashboard</h1>
 
-<label>Employee: <input type="text" id="employee"></label>
-<label>Location: <input type="text" id="location"></label>
-<button id="generateSession">Generate Session</button>
-<button id="confirmDevice" disabled>Connect Device</button>
-<button id="startScanning" disabled>Start Scanning</button>
-<button id="endSession" disabled>End Session</button>
+  <div>
+    <label>Session Key: <input type="text" id="sessionKey" placeholder="A1" /></label>
+    <label>Employee Name: <input type="text" id="employeeName" placeholder="John" /></label>
+    <label>Location: <input type="text" id="location" placeholder="Warehouse 1" /></label>
+    <button id="createSession">Create Session</button>
+  </div>
 
-<div id="status">No session</div>
-<div id="scans">Waiting for scans...</div>
+  <div id="connectionDiv" style="display:none; margin-top:20px;">
+    <p id="connectionStatus">Waiting for device connection...</p>
+    <button id="confirmConnection">OK</button>
+    <button id="startScanning">Start Scanning</button>
+    <button id="stopScanning">Stop Scanning</button>
+  </div>
 
-<script>
-let sessionKey = null;
-let scanning = false;
+  <h2>Scanned Packages</h2>
+  <div id="scans"></div>
 
-document.getElementById('generateSession').addEventListener('click', async () => {
-  const employee = document.getElementById('employee').value.trim();
-  const location = document.getElementById('location').value.trim();
-  if (!employee || !location) return alert("Fill fields");
+  <script>
+    let sessionKey = '';
+    let scanning = false;
+    let connected = false;
+    const scannedSet = new Set(); // cooldown to prevent duplicates
 
-  const res = await fetch('/api/session/start', {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ employee, location })
-  });
-  const data = await res.json();
-  if(res.ok) {
-    sessionKey = data.sessionKey;
-    document.getElementById('status').textContent = `Session ${sessionKey} created. Waiting for device...`;
-    document.getElementById('confirmDevice').disabled = false;
-    document.getElementById('endSession').disabled = false;
-  } else alert(data.error);
-});
+    document.getElementById('createSession').addEventListener('click', () => {
+      const keyInput = document.getElementById('sessionKey').value.trim();
+      const employee = document.getElementById('employeeName').value.trim();
+      const location = document.getElementById('location').value.trim();
+      if (!keyInput || !employee || !location) {
+        alert("Please fill in session key, employee, and location.");
+        return;
+      }
+      sessionKey = keyInput;
+      document.getElementById('connectionDiv').style.display = 'block';
+      document.getElementById('connectionStatus').textContent = "Device connected! Hit OK to continue.";
+    });
 
-document.getElementById('confirmDevice').addEventListener('click', async () => {
-  const res = await fetch('/api/session/connect', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ sessionKey }) });
-  const data = await res.json();
-  if(res.ok) {
-    alert(`Device ${data.deviceName} connected`);
-    document.getElementById('status').textContent = `Device ${data.deviceName} connected. Ready to scan.`;
-    document.getElementById('startScanning').disabled = false;
-    document.getElementById('confirmDevice').disabled = true;
-  } else alert(data.error);
-});
+    document.getElementById('confirmConnection').addEventListener('click', () => {
+      connected = true;
+      alert('Device confirmed. You can now start scanning.');
+    });
 
-document.getElementById('startScanning').addEventListener('click', () => {
-  scanning = true;
-  document.getElementById('status').textContent += " | Scanning started";
-});
+    document.getElementById('startScanning').addEventListener('click', () => {
+      if (!connected) { alert("Connect device first."); return; }
+      scanning = true;
+      alert("Scanning started!");
+    });
 
-document.addEventListener('packageScanned', async (event) => {
-  if(!scanning) return;
-  scanning = false; // stop after one scan
-  const barcode = event.detail.barcode;
+    document.getElementById('stopScanning').addEventListener('click', () => {
+      scanning = false;
+      alert("Scanning stopped!");
+    });
 
-  const employee = document.getElementById('employee').value;
-  const location = document.getElementById('location').value;
+    // Poll server for new scans every 1.5 sec
+    async function fetchScans() {
+      if (!sessionKey || !scanning) return;
+      try {
+        const res = await fetch(`/api/package/updates?sessionKey=${sessionKey}`);
+        const data = await res.json();
+        data.forEach(pkg => {
+          if (!scannedSet.has(pkg.packageId)) {
+            scannedSet.add(pkg.packageId);
+            const div = document.createElement('div');
+            div.className = 'scan-entry';
+            div.innerHTML = `
+              <strong>Scanned:</strong> ${pkg.packageId} <br/>
+              <strong>Tracking:</strong> ${pkg.trackingNumber} <br/>
+              <strong>Customer:</strong> ${pkg.customerName} <br/>
+              <strong>Recipient:</strong> ${pkg.recipientName} <br/>
+              <strong>Destination:</strong> ${pkg.destination} <br/>
+              <strong>Status:</strong> ${pkg.currentPublicStatus} <br/>
+              <strong>Time:</strong> ${new Date(pkg.checkpoints[pkg.checkpoints.length-1].timestamp).toLocaleTimeString()}
+            `;
+            document.getElementById('scans').prepend(div);
+          }
+        });
+      } catch (e) { console.error(e); }
+    }
 
-  const res = await fetch('/api/package/scan', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({ sessionKey, barcode, action:'scanned', location, employee })
-  });
-  const data = await res.json();
-  const scansDiv = document.getElementById('scans');
-  if(data.error) {
-    scansDiv.textContent = `Scanned: ${barcode}\nStatus: ${data.error}\nTime: ${new Date().toLocaleTimeString()}\n\n` + scansDiv.textContent;
-  } else {
-    scansDiv.textContent = `Scanned: ${barcode}\nStatus: ${data.package.currentPublicStatus}\nCustomer: ${data.package.customerName}\nRecipient: ${data.package.recipientName}\nDestination: ${data.package.destination}\nTime: ${new Date().toLocaleTimeString()}\n\n` + scansDiv.textContent;
-  }
-  document.getElementById('startScanning').disabled = false;
-});
-
-document.getElementById('endSession').addEventListener('click', async () => {
-  const res = await fetch('/api/session/end', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ sessionKey }) });
-  if(res.ok) document.getElementById('status').textContent = "Session ended";
-});
-</script>
+    setInterval(fetchScans, 1500);
+  </script>
 </body>
 </html>
