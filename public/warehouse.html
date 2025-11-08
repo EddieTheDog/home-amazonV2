@@ -23,31 +23,54 @@ button { padding: 6px 12px; margin-right: 5px; margin-top: 10px; }
 <button id="endSession">End Session</button>
 
 <div id="status">No active session</div>
-
 <h2>Scanned Packages</h2>
 <div id="scans">Waiting for scans...</div>
 
 <script>
 let sessionActive = false;
 let sessionKey = null;
-let employee = null;
-let location = null;
+let scanInterval = null;
 
-document.getElementById('startSession').addEventListener('click', () => {
+document.getElementById('startSession').addEventListener('click', async () => {
   sessionKey = document.getElementById('sessionKey').value.trim();
-  employee = document.getElementById('employee').value.trim();
-  location = document.getElementById('location').value.trim();
-  if (!sessionKey || !employee || !location) return alert("Fill all fields");
-  sessionActive = true;
-  document.getElementById('status').textContent = `Session ${sessionKey} started`;
-  document.getElementById('scans').textContent = "Waiting for scans...";
+  const employee = document.getElementById('employee').value.trim();
+  const location = document.getElementById('location').value.trim();
+  if(!sessionKey || !employee || !location) return alert("Fill all fields");
+
+  try {
+    const res = await fetch('/api/session/start', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ sessionKey, employee, location })
+    });
+    const data = await res.json();
+    if(res.ok){
+      sessionActive = true;
+      document.getElementById('status').textContent = `Session ${sessionKey} started`;
+      document.getElementById('scans').textContent = "Waiting for scans...";
+
+      scanInterval = setInterval(async () => {
+        const response = await fetch(`/api/session/${sessionKey}/scans`);
+        const scans = await response.json();
+        document.getElementById('scans').textContent = JSON.stringify(scans, null, 2);
+      }, 2000);
+    } else alert(data.error);
+  } catch(e){ alert(e.message); }
 });
 
-document.getElementById('endSession').addEventListener('click', () => {
-  if (!sessionActive) return;
-  sessionActive = false;
-  document.getElementById('status').textContent = `Session ${sessionKey} ended`;
-  document.getElementById('scans').textContent += "\nSession ended.";
+document.getElementById('endSession').addEventListener('click', async () => {
+  if(!sessionActive) return;
+  try {
+    await fetch('/api/session/end', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ sessionKey })
+    });
+    sessionActive = false;
+    clearInterval(scanInterval);
+    document.getElementById('status').textContent = `Session ${sessionKey} ended`;
+    document.getElementById('scans').textContent += "\nSession ended.";
+  } catch(e){ alert(e.message); }
 });
 </script>
 </body>
