@@ -16,7 +16,6 @@ button { padding: 6px 12px; margin-right: 5px; margin-top: 10px; }
 <body>
 <h1>Warehouse - Laptop</h1>
 
-<label>Session ID: <input type="text" id="sessionKey"></label>
 <label>Employee Name: <input type="text" id="employee"></label>
 <label>Location: <input type="text" id="location"></label>
 <button id="startSession">Start Session</button>
@@ -31,23 +30,34 @@ button { padding: 6px 12px; margin-right: 5px; margin-top: 10px; }
 let sessionActive = false;
 let sessionKey = null;
 let employee = null;
-let location = null;
+let warehouseLocation = null;
+
+// Generate session key like A1, B2, etc.
+function generateSessionKey() {
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const numbers = "0123456789";
+  const letter = letters[Math.floor(Math.random() * letters.length)];
+  const number = numbers[Math.floor(Math.random() * numbers.length)];
+  return letter + number;
+}
 
 document.getElementById('startSession').addEventListener('click', async () => {
-  sessionKey = document.getElementById('sessionKey').value.trim();
   employee = document.getElementById('employee').value.trim();
-  location = document.getElementById('location').value.trim();
-  if (!sessionKey || !employee || !location) return alert("Fill all fields");
+  warehouseLocation = document.getElementById('location').value.trim();
+  if (!employee || !warehouseLocation) return alert("Fill all fields");
+
+  // Generate session key
+  sessionKey = generateSessionKey();
 
   const res = await fetch('/api/session/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionKey, employee, location })
+    body: JSON.stringify({ sessionKey, employee, location: warehouseLocation })
   });
   const data = await res.json();
   if (res.ok) {
     sessionActive = true;
-    document.getElementById('status').textContent = `Session ${sessionKey} started`;
+    document.getElementById('status').textContent = `Session ${sessionKey} started by ${employee} at ${warehouseLocation}`;
     document.getElementById('scans').textContent = "Waiting for scans...";
   } else {
     alert(data.error || "Failed to start session");
@@ -55,7 +65,7 @@ document.getElementById('startSession').addEventListener('click', async () => {
 });
 
 document.getElementById('endSession').addEventListener('click', async () => {
-  if (!sessionActive) return;
+  if (!sessionActive) return alert("No active session");
   const res = await fetch('/api/session/end', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
