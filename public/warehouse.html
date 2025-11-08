@@ -10,7 +10,7 @@ label { display: block; margin: 8px 0; }
 input { padding: 5px; width: 250px; margin-bottom: 5px; }
 button { padding: 6px 12px; margin-right: 5px; margin-top: 10px; }
 #status { margin-top: 10px; font-weight: bold; }
-#scans { background: #f5f5f5; padding: 10px; margin-top: 20px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; }
+#scans { background: #f5f5f5; padding: 10px; margin-top: 20px; max-height: 400px; overflow-y: auto; white-space: pre-wrap; }
 </style>
 </head>
 <body>
@@ -19,34 +19,36 @@ button { padding: 6px 12px; margin-right: 5px; margin-top: 10px; }
 <label>Employee Name: <input type="text" id="employee"></label>
 <label>Location: <input type="text" id="location"></label>
 <button id="startSession">Start Session</button>
+<button id="connectDevice">Connect Device</button>
+<button id="startScanning" disabled>Start Scanning</button>
 <button id="endSession">End Session</button>
 
 <div id="status">No active session</div>
-
-<h2>Scanned Packages</h2>
 <div id="scans">Waiting for scans...</div>
 
 <script>
 let sessionActive = false;
+let deviceConnected = false;
 let sessionKey = null;
 let employee = null;
 let warehouseLocation = null;
+let lastScanTime = 0;
+const cooldown = 2000; // 2 seconds
 
-// Generate session key like A1, B2, etc.
+// Generate session key like A1, B2
 function generateSessionKey() {
   const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   const numbers = "0123456789";
-  const letter = letters[Math.floor(Math.random() * letters.length)];
-  const number = numbers[Math.floor(Math.random() * numbers.length)];
-  return letter + number;
+  return letters[Math.floor(Math.random()*letters.length)] +
+         numbers[Math.floor(Math.random()*numbers.length)];
 }
 
+// Start session
 document.getElementById('startSession').addEventListener('click', async () => {
   employee = document.getElementById('employee').value.trim();
   warehouseLocation = document.getElementById('location').value.trim();
   if (!employee || !warehouseLocation) return alert("Fill all fields");
 
-  // Generate session key
   sessionKey = generateSessionKey();
 
   const res = await fetch('/api/session/start', {
@@ -58,12 +60,32 @@ document.getElementById('startSession').addEventListener('click', async () => {
   if (res.ok) {
     sessionActive = true;
     document.getElementById('status').textContent = `Session ${sessionKey} started by ${employee} at ${warehouseLocation}`;
-    document.getElementById('scans').textContent = "Waiting for scans...";
+    document.getElementById('scans').textContent = "Waiting for device connection...";
   } else {
     alert(data.error || "Failed to start session");
   }
 });
 
+// Connect device
+document.getElementById('connectDevice').addEventListener('click', () => {
+  if (!sessionActive) return alert("Start a session first");
+  deviceConnected = true;
+  alert("Device connected! Hit OK to continue.");
+  document.getElementById('status').textContent += " | Device connected";
+  document.getElementById('startScanning').disabled = false;
+});
+
+// Start scanning button (just enables the scanning simulation for this page)
+document.getElementById('startScanning').addEventListener('click', () => {
+  if (!deviceConnected) return alert("Connect a device first");
+  document.getElementById('status').textContent += " | Scanning started";
+  document.getElementById('startScanning').disabled = true;
+
+  // Simulate listening to incoming scans from devices
+  startSimulatedScans();
+});
+
+// End session
 document.getElementById('endSession').addEventListener('click', async () => {
   if (!sessionActive) return alert("No active session");
   const res = await fetch('/api/session/end', {
@@ -74,12 +96,46 @@ document.getElementById('endSession').addEventListener('click', async () => {
   const data = await res.json();
   if (res.ok) {
     sessionActive = false;
+    deviceConnected = false;
     document.getElementById('status').textContent = `Session ${sessionKey} ended`;
     document.getElementById('scans').textContent += "\nSession ended.";
+    document.getElementById('startScanning').disabled = true;
   } else {
     alert(data.error || "Failed to end session");
   }
 });
+
+// Simulated incoming scans
+function startSimulatedScans() {
+  // Replace this with real WebSocket or polling from phone later
+  setInterval(async () => {
+    if (!sessionActive || !deviceConnected) return;
+    const now = Date.now();
+    if (now - lastScanTime < cooldown) return; // cooldown
+    lastScanTime = now;
+
+    // Simulated scanned barcode
+    const simulatedBarcode = 'PKG-' + Math.floor(1000 + Math.random()*9000);
+
+    // Send scan to server
+    const res = await fetch('/api/package/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionKey,
+        barcode: simulatedBarcode,
+        action: 'scanned',
+        location: warehouseLocation,
+        employee
+      })
+    });
+    const data = await res.json();
+
+    // Display scan info on warehouse screen
+    const scansDiv = document.getElementById('scans');
+    scansDiv.textContent = `Scanned: ${simulatedBarcode}\nStatus: ${data.package?.currentPublicStatus || 'Error'}\nTime: ${new Date().toLocaleTimeString()}\n\n` + scansDiv.textContent;
+  }, 2500);
+}
 </script>
 </body>
 </html>
