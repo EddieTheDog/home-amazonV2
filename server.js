@@ -16,7 +16,6 @@ const PORT = process.env.PORT || 3000;
 
 const packagesFile = path.join(__dirname, "packages.json");
 const keysFile = path.join(__dirname, "keys.json");
-const sessionsFile = path.join(__dirname, "sessions.json");
 
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, "public")));
@@ -24,14 +23,11 @@ app.use(express.static(path.join(__dirname, "public")));
 // Ensure data files exist
 if (!fs.existsSync(packagesFile)) fs.writeFileSync(packagesFile, JSON.stringify([]));
 if (!fs.existsSync(keysFile)) fs.writeFileSync(keysFile, JSON.stringify([]));
-if (!fs.existsSync(sessionsFile)) fs.writeFileSync(sessionsFile, JSON.stringify([]));
 
 const readPackages = () => JSON.parse(fs.readFileSync(packagesFile));
 const writePackages = (data) => fs.writeFileSync(packagesFile, JSON.stringify(data, null, 2));
 const readKeys = () => JSON.parse(fs.readFileSync(keysFile));
 const writeKeys = (data) => fs.writeFileSync(keysFile, JSON.stringify(data, null, 2));
-const readSessions = () => JSON.parse(fs.readFileSync(sessionsFile));
-const writeSessions = (data) => fs.writeFileSync(sessionsFile, JSON.stringify(data, null, 2));
 
 function generateBarcode() {
   return crypto.randomBytes(4).toString("hex");
@@ -39,13 +35,6 @@ function generateBarcode() {
 
 function generateTrackingNumber() {
   return "TRK-" + Math.floor(100000 + Math.random() * 900000);
-}
-
-function generateSessionKey() {
-  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  const numbers = "0123456789";
-  return letters[Math.floor(Math.random()*letters.length)] +
-         numbers[Math.floor(Math.random()*numbers.length)];
 }
 
 // Friendly URLs
@@ -132,21 +121,19 @@ app.post("/api/package/scan", (req, res) => {
   if (!sessionKey || !barcode || !action || !location || !employee)
     return res.status(400).json({ error: "Missing required fields" });
 
-  const sessions = readSessions();
-  const session = sessions.find(s => s.sessionKey === sessionKey && s.connected);
-  if (!session) return res.status(400).json({ error: "Session not connected" });
-
   const packages = readPackages();
   const pkg = packages.find(p => p.packageId === barcode);
   if (!pkg) return res.status(404).json({ error: "Package not found" });
 
   pkg.currentPublicStatus = action;
+
   pkg.checkpoints.push({
     order: pkg.checkpoints.length + 1,
     locationName: location,
     timestamp: new Date(),
     scannedBy: employee,
     publicStatus: action,
+    sessionKey,
     notes: notes || ""
   });
 
@@ -162,49 +149,14 @@ app.get("/api/package/tracking/:trackingNumber", (req, res) => {
   res.json(pkg);
 });
 
-// Session management
-app.post("/api/session/start", (req, res) => {
-  const { employee, location } = req.body;
-  if (!employee || !location) return res.status(400).json({ error: "Missing fields" });
-
-  const sessionKey = generateSessionKey();
-  const sessions = readSessions();
-  sessions.push({ sessionKey, employee, location, connected: false, deviceName: null });
-  writeSessions(sessions);
-
-  res.json({ message: "Session created", sessionKey });
-});
-
-app.post("/api/session/join", (req, res) => {
-  const { sessionKey, deviceName } = req.body;
-  if (!sessionKey || !deviceName) return res.status(400).json({ error: "Missing fields" });
-
-  const sessions = readSessions();
-  const session = sessions.find(s => s.sessionKey === sessionKey);
-  if (!session) return res.status(404).json({ error: "Session not found" });
-
-  session.deviceName = deviceName;
-  writeSessions(sessions);
-  res.json({ message: `Device ${deviceName} queued for session ${sessionKey}` });
-});
-
-app.post("/api/session/connect", (req, res) => {
-  const { sessionKey } = req.body;
-  const sessions = readSessions();
-  const session = sessions.find(s => s.sessionKey === sessionKey);
-  if (!session) return res.status(404).json({ error: "Session not found" });
-
-  session.connected = true;
-  writeSessions(sessions);
-  res.json({ message: "Session connected", deviceName: session.deviceName });
-});
-
-app.post("/api/session/end", (req, res) => {
-  const { sessionKey } = req.body;
-  let sessions = readSessions();
-  sessions = sessions.filter(s => s.sessionKey !== sessionKey);
-  writeSessions(sessions);
-  res.json({ message: "Session ended" });
+// Get all packages scanned in a session
+app.get('/api/package/session-scans/:sessionKey', (req, res) => {
+  const { sessionKey } = req.params;
+  const packages = readPackages();
+  const sessionPackages = packages.filter(pkg =>
+    pkg.checkpoints.some(cp => cp.sessionKey === sessionKey)
+  );
+  res.json(sessionPackages);
 });
 
 app.listen(PORT, () => console.log(`🚀 Home Amazon V2 running on port ${PORT}`));
