@@ -1,42 +1,34 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Warehouse - Laptop</title>
-<style>
-body { font-family: Arial, sans-serif; margin: 20px; }
-h1 { color: #333; }
-label { display: block; margin: 8px 0; }
-input { padding: 5px; width: 250px; }
-button { padding: 6px 12px; margin-top: 10px; }
-#scans { background: #f5f5f5; padding: 10px; margin-top: 20px; max-height: 300px; overflow-y: auto; }
-</style>
-</head>
-<body>
 <h1>Warehouse - Laptop</h1>
 
 <label>Session ID: <input type="text" id="sessionKey"></label>
 <label>Employee Name: <input type="text" id="employee"></label>
 <label>Location: <input type="text" id="location"></label>
 <button id="startSession">Start Session</button>
+<button id="endSession">End Session</button>
+
+<h2>Status</h2>
+<div id="status">No active session</div>
 
 <h2>Scanned Packages</h2>
-<div id="scans">Waiting for scans...</div>
+<div id="scans"></div>
 
 <script>
+let sessionActive = false;
 let sessionKey = null;
-let employee = null;
-let location = null;
 
 document.getElementById('startSession').addEventListener('click', () => {
   sessionKey = document.getElementById('sessionKey').value.trim();
-  employee = document.getElementById('employee').value.trim();
-  location = document.getElementById('location').value.trim();
+  const employee = document.getElementById('employee').value.trim();
+  const location = document.getElementById('location').value.trim();
   if(!sessionKey || !employee || !location) return alert("Fill all fields");
-  document.getElementById('scans').textContent = "Session started. Waiting for scans...";
+  sessionActive = true;
+  document.getElementById('status').textContent = `Session ${sessionKey} started`;
+  document.getElementById('scans').textContent = "Waiting for scans...";
 });
 
-// Poll server for scans from session (optional, can be implemented with WebSocket for real-time)
+document.getElementById('endSession').addEventListener('click', () => {
+  if(!sessionActive) return;
+  sessionActive = false;
+  document.getElementById('status').textContent = `Session ${sessionKey} ended`;
+});
 </script>
-</body>
-</html>
