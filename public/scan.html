@@ -4,71 +4,63 @@
 <meta charset="UTF-8">
 <title>Warehouse Scanner</title>
 <style>
-body { font-family: Arial, sans-serif; margin: 20px; }
-h1 { color: #333; }
-label { display: block; margin: 8px 0; }
-input { padding: 5px; width: 250px; margin-bottom: 5px; }
-button { padding: 6px 12px; margin-top: 10px; margin-right: 5px; }
-#status { margin-top: 10px; font-weight: bold; }
+body{font-family:Arial;margin:20px;}
+input{padding:5px;width:200px;margin-bottom:5px;}
+button{padding:5px 10px;margin-top:5px;margin-right:5px;}
+#status{font-weight:bold;margin-top:10px;}
 </style>
 </head>
 <body>
 <h1>Warehouse Scanner</h1>
-
 <label>Session Key: <input type="text" id="sessionKey"></label>
-<button id="connectSession">Connect Session</button>
-<div id="status">Not connected</div>
+<label>Device Name: <input type="text" id="deviceName"></label>
+<button id="joinQueue">Join Queue</button>
 
+<div id="status">Not connected</div>
 <label>Scan Barcode:</label>
-<input type="text" id="barcodeInput" placeholder="Scan barcode here" disabled>
+<input type="text" id="barcodeInput" disabled>
 <button id="sendScan" disabled>Send Scan</button>
 
 <script>
-let sessionConnected = false;
-let sessionKey = null;
+let sessionKey=null;
+let deviceName=null;
 
-// Connect to session
-document.getElementById('connectSession').addEventListener('click', () => {
-  sessionKey = document.getElementById('sessionKey').value.trim();
-  if (!sessionKey) return alert("Enter a session key");
-  sessionConnected = true;
-  document.getElementById('status').textContent = `Connected to session ${sessionKey}`;
-  document.getElementById('barcodeInput').disabled = false;
-  document.getElementById('sendScan').disabled = false;
+document.getElementById('joinQueue').addEventListener('click', async ()=>{
+    sessionKey = document.getElementById('sessionKey').value.trim();
+    deviceName = document.getElementById('deviceName').value.trim();
+    if(!sessionKey || !deviceName) return alert("Fill all fields");
+    
+    const res = await fetch('/api/session/join',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({sessionKey,deviceName})
+    });
+    const data = await res.json();
+    if(res.ok){
+        document.getElementById('status').textContent = `Joined queue for session ${sessionKey}`;
+        document.getElementById('barcodeInput').disabled = false;
+        document.getElementById('sendScan').disabled = false;
+    }
 });
 
-// Send scan to warehouse
-document.getElementById('sendScan').addEventListener('click', async () => {
-  if (!sessionConnected) return alert("Connect to a session first");
-
-  const barcode = document.getElementById('barcodeInput').value.trim();
-  if (!barcode) return alert("Scan a barcode");
-
-  // Send to server (updates warehouse package)
-  const res = await fetch('/api/package/scan', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      sessionKey,
-      barcode,
-      action: 'scanned',
-      location: 'Phone Scanner',
-      employee: 'Scanner Device'
-    })
-  });
-
-  const data = await res.json();
-  if (data.error) {
-    alert(`Error: ${data.error}`);
-  } else {
-    alert(`Scanned successfully!\nStatus: ${data.package.currentPublicStatus}`);
-    // Trigger a custom event for the laptop warehouse page
-    window.dispatchEvent(new CustomEvent('packageScanned', { detail: { barcode } }));
-  }
-
-  // Clear input for next scan
-  document.getElementById('barcodeInput').value = '';
-  document.getElementById('barcodeInput').focus();
+document.getElementById('sendScan').addEventListener('click', async ()=>{
+    const barcode = document.getElementById('barcodeInput').value.trim();
+    if(!barcode) return alert("Scan barcode first");
+    const res = await fetch('/api/package/scan',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+            sessionKey,
+            barcode,
+            action:'scanned',
+            location:'Phone Scanner',
+            employee:deviceName
+        })
+    });
+    const data = await res.json();
+    if(data.error) alert(`Error: ${data.error}`);
+    else alert(`Scanned: ${barcode} Status: ${data.package.currentPublicStatus}`);
+    document.getElementById('barcodeInput').value='';
 });
 </script>
 </body>
