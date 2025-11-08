@@ -9,50 +9,34 @@ h1 { color: #333; }
 label { display: block; margin: 8px 0; }
 input { padding: 5px; width: 250px; }
 button { padding: 6px 12px; margin-top: 10px; }
-#result { background: #f5f5f5; padding: 10px; margin-top: 10px; white-space: pre-wrap; }
+#scans { background: #f5f5f5; padding: 10px; margin-top: 20px; max-height: 300px; overflow-y: auto; }
 </style>
 </head>
 <body>
 <h1>Warehouse - Laptop</h1>
 
-<label>Session Key: <input type="text" id="sessionKey"></label>
+<label>Session ID: <input type="text" id="sessionKey"></label>
 <label>Employee Name: <input type="text" id="employee"></label>
 <label>Location: <input type="text" id="location"></label>
+<button id="startSession">Start Session</button>
 
-<h2>Manual Scan</h2>
-<label>Barcode or Package ID: <input type="text" id="barcode"></label>
-<button id="manualScan">Scan</button>
-
-<pre id="result"></pre>
+<h2>Scanned Packages</h2>
+<div id="scans">Waiting for scans...</div>
 
 <script>
-const result = document.getElementById('result');
+let sessionKey = null;
+let employee = null;
+let location = null;
 
-async function sendScan(barcode) {
-  const sessionKey = document.getElementById('sessionKey').value;
-  const employee = document.getElementById('employee').value;
-  const location = document.getElementById('location').value;
-  if(!barcode || !sessionKey || !employee || !location) return alert("Fill all fields");
-
-  const res = await fetch('/api/package/scan', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({
-      sessionKey,
-      barcode,
-      action: 'scanned',
-      location,
-      employee
-    })
-  });
-  const json = await res.json();
-  result.textContent = JSON.stringify(json.package, null, 2);
-}
-
-document.getElementById('manualScan').addEventListener('click', () => {
-  const barcode = document.getElementById('barcode').value;
-  sendScan(barcode);
+document.getElementById('startSession').addEventListener('click', () => {
+  sessionKey = document.getElementById('sessionKey').value.trim();
+  employee = document.getElementById('employee').value.trim();
+  location = document.getElementById('location').value.trim();
+  if(!sessionKey || !employee || !location) return alert("Fill all fields");
+  document.getElementById('scans').textContent = "Session started. Waiting for scans...";
 });
+
+// Poll server for scans from session (optional, can be implemented with WebSocket for real-time)
 </script>
 </body>
 </html>
