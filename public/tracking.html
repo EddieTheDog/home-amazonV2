@@ -2,31 +2,29 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Home Amazon - Tracking</title>
+<title>Package Tracking</title>
 </head>
 <body>
 <h1>Track Your Package</h1>
 
 <form id="trackForm">
-  <label>Barcode: <input type="text" id="barcode" required></label>
+  <label>Barcode: <input type="text" id="barcode"></label>
   <button type="submit">Track</button>
 </form>
 
 <pre id="result"></pre>
 
 <script>
-const form = document.getElementById('trackForm');
 const result = document.getElementById('result');
-
-// Auto-fill from query string
-const params = new URLSearchParams(window.location.search);
 const barcodeInput = document.getElementById('barcode');
+
+const params = new URLSearchParams(window.location.search);
 if (params.has('barcode')) barcodeInput.value = params.get('barcode');
 
-form.addEventListener('submit', async (e) => {
+document.getElementById('trackForm').addEventListener('submit', async e => {
   e.preventDefault();
   const barcode = barcodeInput.value;
-  const res = await fetch('/api/package/' + barcode);
+  const res = await fetch(`/api/package/${barcode}`);
   const json = await res.json();
   result.textContent = JSON.stringify(json, null, 2);
 });
