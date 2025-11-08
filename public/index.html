@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Home Amazon - Front Desk</title>
+<title>Front Desk - Home Amazon</title>
 </head>
 <body>
 <h1>Front Desk - Create Package</h1>
@@ -14,11 +14,16 @@
   <button type="submit">Create Package</button>
 </form>
 
-<pre id="result"></pre>
+<h2>Package Created</h2>
+<div id="packageResult"></div>
+<img id="barcodeImg" src="" alt="Barcode" />
+<img id="qrImg" src="" alt="QR Code" />
 
 <script>
 const form = document.getElementById('createPackageForm');
-const result = document.getElementById('result');
+const packageResult = document.getElementById('packageResult');
+const barcodeImg = document.getElementById('barcodeImg');
+const qrImg = document.getElementById('qrImg');
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -33,7 +38,10 @@ form.addEventListener('submit', async (e) => {
     body: JSON.stringify(data)
   });
   const json = await res.json();
-  result.textContent = JSON.stringify(json, null, 2);
+  packageResult.textContent = JSON.stringify(json.package, null, 2);
+
+  barcodeImg.src = json.package.barcodeUrl;
+  qrImg.src = json.package.qrUrl;
 });
 </script>
 </body>
