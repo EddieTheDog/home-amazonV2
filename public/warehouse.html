@@ -2,43 +2,61 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Home Amazon - Warehouse Scan</title>
+<title>Warehouse Scan</title>
+<script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body>
 <h1>Warehouse - Scan Package</h1>
 
-<form id="scanForm">
-  <label>Session Key: <input type="text" id="sessionKey" required></label><br>
-  <label>Barcode: <input type="text" id="barcode" required></label><br>
-  <label>Action: <input type="text" id="action" required></label><br>
-  <label>Location: <input type="text" id="location" required></label><br>
-  <label>Employee: <input type="text" id="employee" required></label><br>
-  <button type="submit">Scan</button>
-</form>
+<label>Session Key: <input type="text" id="sessionKey"></label><br>
+<label>Employee: <input type="text" id="employee"></label><br>
+<label>Location: <input type="text" id="location"></label><br>
+
+<h3>Manual Scan</h3>
+<label>Barcode: <input type="text" id="barcode"></label>
+<button id="manualScan">Scan</button>
+
+<h3>Camera Scan</h3>
+<div id="reader" style="width:300px;"></div>
 
 <pre id="result"></pre>
 
 <script>
-const form = document.getElementById('scanForm');
 const result = document.getElementById('result');
 
-form.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const data = {
-    sessionKey: document.getElementById('sessionKey').value,
-    barcode: document.getElementById('barcode').value,
-    action: document.getElementById('action').value,
-    location: document.getElementById('location').value,
-    employee: document.getElementById('employee').value
-  };
+async function sendScan(barcode) {
+  const sessionKey = document.getElementById('sessionKey').value;
+  const employee = document.getElementById('employee').value;
+  const location = document.getElementById('location').value;
+  if(!barcode || !sessionKey || !employee || !location) return;
+
   const res = await fetch('/api/package/scan', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      sessionKey,
+      barcode,
+      action: 'scanned',
+      location,
+      employee
+    })
   });
   const json = await res.json();
-  result.textContent = JSON.stringify(json, null, 2);
+  result.textContent = JSON.stringify(json.package, null, 2);
+}
+
+// Manual scan
+document.getElementById('manualScan').addEventListener('click', () => {
+  const barcode = document.getElementById('barcode').value;
+  sendScan(barcode);
 });
+
+// Camera scan
+new Html5Qrcode("reader").start(
+  { facingMode: "environment" },
+  { fps: 10, qrbox: 250 },
+  decodedText => sendScan(decodedText)
+);
 </script>
 </body>
 </html>
