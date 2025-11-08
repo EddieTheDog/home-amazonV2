@@ -3,6 +3,8 @@ import bodyParser from "body-parser";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import QRCode from "qrcode";
+import bwipjs from "bwip-js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,7 +12,6 @@ const PORT = process.env.PORT || 3000;
 const dataPath = path.join(process.cwd(), "packages.json");
 const sessionPath = path.join(process.cwd(), "keys.json");
 
-// Middleware
 app.use(bodyParser.json());
 app.use(express.static(path.join(process.cwd(), "public")));
 
@@ -18,18 +19,51 @@ app.use(express.static(path.join(process.cwd(), "public")));
 if (!fs.existsSync(dataPath)) fs.writeFileSync(dataPath, JSON.stringify([]));
 if (!fs.existsSync(sessionPath)) fs.writeFileSync(sessionPath, JSON.stringify([]));
 
-// Helper functions
 const readData = () => JSON.parse(fs.readFileSync(dataPath));
 const writeData = (data) => fs.writeFileSync(dataPath, JSON.stringify(data, null, 2));
-
 const readSessions = () => JSON.parse(fs.readFileSync(sessionPath));
 const writeSessions = (data) => fs.writeFileSync(sessionPath, JSON.stringify(data, null, 2));
 
 const generateBarcode = () => crypto.randomBytes(4).toString("hex");
 
-// Routes
+// Test endpoint
 app.get("/api/test", (req, res) => res.json({ message: "Home Amazon V2 running ✅" }));
 
+// Barcode image
+app.get("/api/barcode/:code", async (req, res) => {
+  try {
+    bwipjs.toBuffer({
+      bcid: 'code128',
+      text: req.params.code,
+      scale: 3,
+      height: 10,
+      includetext: true,
+      textxalign: 'center',
+    }, function (err, png) {
+      if (err) return res.status(500).send("Error generating barcode");
+      res.type('image/png');
+      res.send(png);
+    });
+  } catch {
+    res.status(500).send("Server error");
+  }
+});
+
+// QR code image
+app.get("/api/qrcode/:code", async (req, res) => {
+  try {
+    const url = `${req.protocol}://${req.get('host')}/tracking.html?barcode=${req.params.code}`;
+    const qr = await QRCode.toDataURL(url);
+    const base64Data = qr.replace(/^data:image\/png;base64,/, "");
+    const imgBuffer = Buffer.from(base64Data, "base64");
+    res.type('image/png');
+    res.send(imgBuffer);
+  } catch {
+    res.status(500).send("Error generating QR code");
+  }
+});
+
+// Create package
 app.post("/api/package/create", (req, res) => {
   const { customerName, recipientName, destination, details } = req.body;
   if (!customerName || !recipientName || !destination)
@@ -37,12 +71,17 @@ app.post("/api/package/create", (req, res) => {
 
   const packages = readData();
   const barcode = generateBarcode();
+  const barcodeUrl = `/api/barcode/${barcode}`;
+  const qrUrl = `/api/qrcode/${barcode}`;
+
   const newPackage = {
     packageId: barcode,
     customerName,
     recipientName,
     destination,
     details: details || {},
+    barcodeUrl,
+    qrUrl,
     currentInternalStatus: "created",
     currentPublicStatus: "Order Created",
     checkpoints: [
@@ -52,10 +91,10 @@ app.post("/api/package/create", (req, res) => {
 
   packages.push(newPackage);
   writeData(packages);
-
   res.json({ message: "Package created", package: newPackage });
 });
 
+// Scan package
 app.post("/api/package/scan", (req, res) => {
   const { sessionKey, barcode, action, location, employee, notes } = req.body;
   if (!sessionKey || !barcode || !action || !location || !employee)
@@ -97,6 +136,7 @@ app.post("/api/package/scan", (req, res) => {
   res.json({ message: "Package updated", package: pkg });
 });
 
+// Track package
 app.get("/api/package/:barcode", (req, res) => {
   const packages = readData();
   const pkg = packages.find(p => p.packageId === req.params.barcode);
@@ -104,6 +144,7 @@ app.get("/api/package/:barcode", (req, res) => {
   res.json(pkg);
 });
 
+// Sessions
 app.post("/api/session/start", (req, res) => {
   const { key, role } = req.body;
   if (!key || !role) return res.status(400).json({ error: "Missing key or role" });
