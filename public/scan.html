@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Warehouse - Phone Scan</title>
+<script src="https://unpkg.com/html5-qrcode"></script>
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; }
+h1 { color: #333; }
+input { padding: 5px; width: 200px; margin-bottom: 5px; }
+#reader { width: 300px; margin-top: 20px; }
+#result { background: #f5f5f5; padding: 10px; margin-top: 10px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h1>Warehouse - Phone Scan</h1>
+
+<label>Session Key: <input type="text" id="sessionKey"></label>
+<label>Employee: <input type="text" id="employee"></label>
+<label>Location: <input type="text" id="location"></label>
+
+<div id="reader"></div>
+<pre id="result"></pre>
+
+<script>
+const result = document.getElementById('result');
+
+async function sendScan(barcode) {
+  const sessionKey = document.getElementById('sessionKey').value;
+  const employee = document.getElementById('employee').value;
+  const location = document.getElementById('location').value;
+  if(!barcode || !sessionKey || !employee || !location) return;
+
+  const res = await fetch('/api/package/scan', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ sessionKey, barcode, action: 'scanned', location, employee })
+  });
+  const json = await res.json();
+  result.textContent = JSON.stringify(json.package, null, 2);
+}
+
+new Html5Qrcode("reader").start(
+  { facingMode: "environment" },
+  { fps: 10, qrbox: 250 },
+  decodedText => sendScan(decodedText)
+);
+</script>
+</body>
+</html>
