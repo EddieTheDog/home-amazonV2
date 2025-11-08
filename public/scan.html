@@ -30,11 +30,16 @@ let connected = false;
 
 document.getElementById('connectSession').addEventListener('click', async () => {
   sessionKey = document.getElementById('sessionKey').value.trim();
-  if(!sessionKey) return alert("Enter a session ID");
+  if (!sessionKey) return alert("Enter a session ID");
 
   // Check if session exists
-  const check = await fetch(`/api/session/${sessionKey}/scans`);
-  if(!check.ok) return alert("Session does not exist or ended");
+  const res = await fetch('/api/session/check', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionKey })
+  });
+  const data = await res.json();
+  if (!res.ok) return alert(data.error || "Session not found");
 
   connected = true;
   document.getElementById('status').textContent = `Connected to session ${sessionKey}`;
@@ -43,11 +48,11 @@ document.getElementById('connectSession').addEventListener('click', async () => 
   new Html5Qrcode("reader").start(
     { facingMode: "environment" },
     { fps: 10, qrbox: 250 },
-    async decodedText => {
-      if(!connected) return;
-      const res = await fetch('/api/package/scan', {
+    decodedText => {
+      if (!connected) return;
+      fetch('/api/package/scan', {
         method: 'POST',
-        headers: {'Content-Type':'application/json'},
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionKey,
           barcode: decodedText,
@@ -55,10 +60,12 @@ document.getElementById('connectSession').addEventListener('click', async () => 
           location: 'Warehouse Scan',
           employee: 'Phone Scanner'
         })
+      })
+      .then(res => res.json())
+      .then(json => {
+        const resultEl = document.getElementById('result');
+        resultEl.textContent = `Scanned: ${decodedText}\nStatus: ${json.package?.currentPublicStatus || 'Error'}\nTime: ${new Date().toLocaleTimeString()}\n\n` + resultEl.textContent;
       });
-      const json = await res.json();
-      const resultEl = document.getElementById('result');
-      resultEl.textContent = `Scanned: ${decodedText}\nStatus: ${json.package?.currentPublicStatus || 'Error'}\nTime: ${new Date().toLocaleTimeString()}\n\n` + resultEl.textContent;
     }
   );
 });
