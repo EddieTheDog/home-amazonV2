@@ -17,6 +17,9 @@ const PORT = process.env.PORT || 3000;
 const packagesFile = path.join(__dirname, "packages.json");
 const keysFile = path.join(__dirname, "keys.json");
 
+// Session store (in memory)
+const activeSessions = {}; // { sessionKey: { employee, location, startedAt } }
+
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -115,11 +118,29 @@ app.post("/api/package/create", (req, res) => {
   res.json({ message: "Package created", package: newPackage });
 });
 
-// Scan package (update status)
+// Start warehouse session
+app.post("/api/session/start", (req, res) => {
+  const { sessionKey, employee, location } = req.body;
+  if (!sessionKey || !employee || !location) return res.status(400).json({ error: "Missing fields" });
+  activeSessions[sessionKey] = { employee, location, startedAt: new Date() };
+  res.json({ message: "Session started", session: activeSessions[sessionKey] });
+});
+
+// End warehouse session
+app.post("/api/session/end", (req, res) => {
+  const { sessionKey } = req.body;
+  if (!sessionKey || !activeSessions[sessionKey]) return res.status(400).json({ error: "Session not found" });
+  delete activeSessions[sessionKey];
+  res.json({ message: "Session ended" });
+});
+
+// Scan package (update status) – checks session exists
 app.post("/api/package/scan", (req, res) => {
   const { sessionKey, barcode, action, location, employee, notes } = req.body;
   if (!sessionKey || !barcode || !action || !location || !employee)
     return res.status(400).json({ error: "Missing required fields" });
+
+  if (!activeSessions[sessionKey]) return res.status(400).json({ error: "Session does not exist" });
 
   const packages = readPackages();
   const pkg = packages.find(p => p.packageId === barcode);
@@ -133,7 +154,8 @@ app.post("/api/package/scan", (req, res) => {
     timestamp: new Date(),
     scannedBy: employee,
     publicStatus: action,
-    notes: notes || ""
+    notes: notes || "",
+    sessionKey
   });
 
   writePackages(packages);
