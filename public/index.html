@@ -3,19 +3,30 @@
 <head>
 <meta charset="UTF-8">
 <title>Front Desk - Home Amazon</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; }
+h1 { color: #333; }
+form { margin-bottom: 20px; }
+label { display: block; margin: 10px 0; }
+input { padding: 5px; width: 300px; }
+button { padding: 8px 12px; margin-top: 10px; }
+#packageResult { background: #f5f5f5; padding: 10px; margin-top: 10px; white-space: pre-wrap; }
+img { margin: 10px 10px 10px 0; }
+</style>
 </head>
 <body>
 <h1>Front Desk - Create Package</h1>
 
 <form id="createPackageForm">
-  <label>Customer Name: <input type="text" id="customerName" required></label><br>
-  <label>Recipient Name: <input type="text" id="recipientName" required></label><br>
-  <label>Destination: <input type="text" id="destination" required></label><br>
+  <label>Customer Name: <input type="text" id="customerName" required></label>
+  <label>Recipient Name: <input type="text" id="recipientName" required></label>
+  <label>Destination: <input type="text" id="destination" required></label>
   <button type="submit">Create Package</button>
 </form>
 
 <h2>Package Created</h2>
 <div id="packageResult"></div>
+<p><strong>Tracking Number:</strong> <span id="trackingNumber"></span></p>
 <img id="barcodeImg" src="" alt="Barcode" />
 <img id="qrImg" src="" alt="QR Code" />
 
@@ -24,6 +35,7 @@ const form = document.getElementById('createPackageForm');
 const packageResult = document.getElementById('packageResult');
 const barcodeImg = document.getElementById('barcodeImg');
 const qrImg = document.getElementById('qrImg');
+const trackingNumberEl = document.getElementById('trackingNumber');
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -38,8 +50,9 @@ form.addEventListener('submit', async (e) => {
     body: JSON.stringify(data)
   });
   const json = await res.json();
-  packageResult.textContent = JSON.stringify(json.package, null, 2);
 
+  packageResult.textContent = JSON.stringify(json.package, null, 2);
+  trackingNumberEl.textContent = json.package.trackingNumber;
   barcodeImg.src = json.package.barcodeUrl;
   qrImg.src = json.package.qrUrl;
 });
