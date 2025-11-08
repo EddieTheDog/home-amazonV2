@@ -2,65 +2,54 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Warehouse Scanner</title>
+<title>Scanner Device</title>
 <style>
-body{font-family:Arial;margin:20px;}
-input{padding:5px;width:200px;margin-bottom:5px;}
-button{padding:5px 10px;margin-top:5px;margin-right:5px;}
-#status{font-weight:bold;margin-top:10px;}
+body { font-family: Arial, sans-serif; margin: 20px; }
+input, button { margin: 5px; padding: 5px; }
+#status { font-weight: bold; margin-top: 10px; }
 </style>
 </head>
 <body>
-<h1>Warehouse Scanner</h1>
+<h1>Scanner Device</h1>
+
 <label>Session Key: <input type="text" id="sessionKey"></label>
 <label>Device Name: <input type="text" id="deviceName"></label>
 <button id="joinQueue">Join Queue</button>
-
 <div id="status">Not connected</div>
+
 <label>Scan Barcode:</label>
-<input type="text" id="barcodeInput" disabled>
+<input type="text" id="barcodeInput" placeholder="Scan barcode here" disabled>
 <button id="sendScan" disabled>Send Scan</button>
 
 <script>
-let sessionKey=null;
-let deviceName=null;
+let sessionConnected = false;
+let sessionKey = null;
 
-document.getElementById('joinQueue').addEventListener('click', async ()=>{
-    sessionKey = document.getElementById('sessionKey').value.trim();
-    deviceName = document.getElementById('deviceName').value.trim();
-    if(!sessionKey || !deviceName) return alert("Fill all fields");
-    
-    const res = await fetch('/api/session/join',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({sessionKey,deviceName})
-    });
-    const data = await res.json();
-    if(res.ok){
-        document.getElementById('status').textContent = `Joined queue for session ${sessionKey}`;
-        document.getElementById('barcodeInput').disabled = false;
-        document.getElementById('sendScan').disabled = false;
-    }
+document.getElementById('joinQueue').addEventListener('click', async () => {
+  sessionKey = document.getElementById('sessionKey').value.trim();
+  const deviceName = document.getElementById('deviceName').value.trim();
+  if(!sessionKey || !deviceName) return alert("Fill both fields");
+
+  const res = await fetch('/api/session/join', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ sessionKey, deviceName })
+  });
+  const data = await res.json();
+  if(res.ok) {
+    document.getElementById('status').textContent = `Queued: ${deviceName}. Waiting for laptop to connect...`;
+    alert("Queued. Wait for laptop confirmation.");
+    document.getElementById('barcodeInput').disabled = false;
+    document.getElementById('sendScan').disabled = false;
+  } else alert(data.error);
 });
 
-document.getElementById('sendScan').addEventListener('click', async ()=>{
-    const barcode = document.getElementById('barcodeInput').value.trim();
-    if(!barcode) return alert("Scan barcode first");
-    const res = await fetch('/api/package/scan',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-            sessionKey,
-            barcode,
-            action:'scanned',
-            location:'Phone Scanner',
-            employee:deviceName
-        })
-    });
-    const data = await res.json();
-    if(data.error) alert(`Error: ${data.error}`);
-    else alert(`Scanned: ${barcode} Status: ${data.package.currentPublicStatus}`);
-    document.getElementById('barcodeInput').value='';
+document.getElementById('sendScan').addEventListener('click', () => {
+  if(!sessionKey) return alert("Not connected to session");
+  const barcode = document.getElementById('barcodeInput').value.trim();
+  if(!barcode) return alert("Scan a barcode");
+  window.dispatchEvent(new CustomEvent('packageScanned', { detail: { barcode } }));
+  document.getElementById('barcodeInput').value = '';
 });
 </script>
 </body>
