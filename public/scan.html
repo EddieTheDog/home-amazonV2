@@ -1,39 +1,26 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Warehouse - Phone Scan</title>
-<script src="https://unpkg.com/html5-qrcode"></script>
-<style>
-body { font-family: Arial, sans-serif; margin: 20px; }
-h1 { color: #333; }
-label { display: block; margin: 8px 0; }
-input { padding: 5px; width: 200px; margin-bottom: 5px; }
-#reader { width: 300px; margin-top: 20px; }
-#result { background: #f5f5f5; padding: 10px; margin-top: 10px; white-space: pre-wrap; max-height: 300px; overflow-y: auto; }
-</style>
-</head>
-<body>
 <h1>Warehouse - Phone Scan</h1>
 
 <label>Session ID: <input type="text" id="sessionKey"></label>
-<button id="startScan">Start Scanning</button>
-
+<button id="connectSession">Connect Session</button>
+<div id="status">Not connected</div>
 <div id="reader"></div>
-<pre id="result">Waiting for session to start...</pre>
+<div id="result"></div>
 
 <script>
 let sessionKey = null;
+let connected = false;
 
-document.getElementById('startScan').addEventListener('click', () => {
+document.getElementById('connectSession').addEventListener('click', () => {
   sessionKey = document.getElementById('sessionKey').value.trim();
-  if(!sessionKey) return alert("Enter session ID first");
-  document.getElementById('result').textContent = "Session started. Scan packages now.";
+  if(!sessionKey) return alert("Enter a session ID");
+  connected = true;
+  document.getElementById('status').textContent = `Connected to session ${sessionKey}`;
 
   new Html5Qrcode("reader").start(
     { facingMode: "environment" },
     { fps: 10, qrbox: 250 },
     decodedText => {
+      if(!connected) return;
       fetch('/api/package/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -48,13 +35,9 @@ document.getElementById('startScan').addEventListener('click', () => {
       .then(res => res.json())
       .then(json => {
         const resultEl = document.getElementById('result');
-        resultEl.textContent = json.package
-          ? `Scanned: ${json.package.packageId}\nStatus: ${json.package.currentPublicStatus}\nTime: ${new Date().toLocaleTimeString()}\n\n` + resultEl.textContent
-          : "Scan failed";
+        resultEl.textContent = `Scanned: ${decodedText}\nStatus: ${json.package?.currentPublicStatus || 'Error'}\n` + resultEl.textContent;
       });
     }
   );
 });
 </script>
-</body>
-</html>
