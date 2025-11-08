@@ -29,8 +29,6 @@
     let sessionKey = '';
     let deviceConnected = false;
     let scanning = false;
-    let lastScanTime = 0;
-    const cooldown = 1500; // 1.5 sec cooldown
 
     const scanLog = document.getElementById('scanLog');
     const statusEl = document.getElementById('status');
@@ -44,7 +42,6 @@
 
     document.getElementById('connectDeviceBtn').addEventListener('click', () => {
       if(!sessionKey) return alert('Create a session first!');
-      // Simple confirm popup for device connection
       if(confirm('Device connected! Click OK to start scanning.')) {
         deviceConnected = true;
         statusEl.textContent = 'Device connected. Ready to scan.';
@@ -67,7 +64,6 @@
       document.getElementById('stopScanBtn').disabled = true;
     });
 
-    // Poll server for new scans
     async function fetchScans() {
       if(!sessionKey) return;
       const res = await fetch(`/api/package/session-scans/${sessionKey}`);
