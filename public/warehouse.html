@@ -4,13 +4,10 @@
 <meta charset="UTF-8">
 <title>Warehouse - Laptop</title>
 <style>
-body { font-family: Arial, sans-serif; margin: 20px; }
-h1 { color: #333; }
-label { display: block; margin: 8px 0; }
-input { padding: 5px; width: 250px; margin-bottom: 5px; }
-button { padding: 6px 12px; margin-right: 5px; margin-top: 10px; }
-#status { margin-top: 10px; font-weight: bold; }
-#scans { background: #f5f5f5; padding: 10px; margin-top: 20px; max-height: 400px; overflow-y: auto; white-space: pre-wrap; }
+body { font-family: Arial; margin: 20px; }
+button { padding: 5px 10px; margin-right: 5px; margin-top: 5px; }
+#status { font-weight: bold; margin-top: 10px; }
+#scans { background:#f5f5f5; padding:10px; margin-top:20px; max-height:400px; overflow-y:auto; white-space:pre-wrap;}
 </style>
 </head>
 <body>
@@ -19,8 +16,6 @@ button { padding: 6px 12px; margin-right: 5px; margin-top: 10px; }
 <label>Employee Name: <input type="text" id="employee"></label>
 <label>Location: <input type="text" id="location"></label>
 <button id="generateSession">Generate Session</button>
-<button id="connectDevice" disabled>Connect Device</button>
-<button id="confirmDevice" disabled>Device OK</button>
 <button id="startScanning" disabled>Start Scanning</button>
 <button id="endSession" disabled>End Session</button>
 
@@ -28,131 +23,36 @@ button { padding: 6px 12px; margin-right: 5px; margin-top: 10px; }
 <div id="scans">Waiting for scans...</div>
 
 <script>
-let sessionActive = false;
-let deviceConnected = false;
-let scanningAllowed = false;
 let sessionKey = null;
-let employee = null;
-let warehouseLocation = null;
-let lastScanTime = 0;
-const cooldown = 2000; // 2 seconds between scans
+let deviceName = null;
+let sessionActive = false;
+let scanningActive = false;
 
-// Generate session key like A1
-function generateSessionKey() {
-  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  const numbers = "0123456789";
-  return letters[Math.floor(Math.random()*letters.length)] +
-         numbers[Math.floor(Math.random()*numbers.length)];
-}
+document.getElementById('generateSession').addEventListener('click', async ()=>{
+    const employee = document.getElementById('employee').value.trim();
+    const location = document.getElementById('location').value.trim();
+    if(!employee || !location) return alert("Fill all fields");
 
-// Generate Session
-document.getElementById('generateSession').addEventListener('click', async () => {
-  employee = document.getElementById('employee').value.trim();
-  warehouseLocation = document.getElementById('location').value.trim();
-  if (!employee || !warehouseLocation) return alert("Fill all fields");
-
-  sessionKey = generateSessionKey();
-
-  const res = await fetch('/api/session/start', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionKey, employee, location: warehouseLocation })
-  });
-  const data = await res.json();
-  if (res.ok) {
-    sessionActive = true;
-    document.getElementById('status').textContent = `Session ${sessionKey} started by ${employee} at ${warehouseLocation}`;
-    document.getElementById('connectDevice').disabled = false;
-    document.getElementById('endSession').disabled = false;
-  } else {
-    alert(data.error || "Failed to start session");
-  }
-});
-
-// Connect Device
-document.getElementById('connectDevice').addEventListener('click', () => {
-  if (!sessionActive) return alert("Start a session first");
-  deviceConnected = true;
-  document.getElementById('status').textContent += " | Device connected!";
-  alert("Device connected! Hit OK to continue.");
-  document.getElementById('confirmDevice').disabled = false;
-  document.getElementById('connectDevice').disabled = true;
-});
-
-// Confirm Device
-document.getElementById('confirmDevice').addEventListener('click', () => {
-  if (!deviceConnected) return alert("Connect a device first");
-  scanningAllowed = true;
-  document.getElementById('status').textContent += " | Scanning ready";
-  document.getElementById('startScanning').disabled = false;
-  document.getElementById('confirmDevice').disabled = true;
-});
-
-// Start Scanning
-document.getElementById('startScanning').addEventListener('click', () => {
-  if (!scanningAllowed) return alert("Confirm device first");
-  document.getElementById('status').textContent += " | Scanning started";
-  document.getElementById('startScanning').disabled = true;
-
-  // Wait for device scan events (replace this with real WebSocket / fetch events)
-  window.addEventListener('packageScanned', handleScan);
-});
-
-// Stop Scanning (after each scan, user can start again)
-function handleScan(event) {
-  const now = Date.now();
-  if (now - lastScanTime < cooldown) return; // cooldown
-  lastScanTime = now;
-
-  const barcode = event.detail.barcode;
-
-  fetch('/api/package/scan', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      sessionKey,
-      barcode,
-      action: 'scanned',
-      location: warehouseLocation,
-      employee
-    })
-  })
-  .then(res => res.json())
-  .then(data => {
-    const scansDiv = document.getElementById('scans');
-    if (data.error) {
-      scansDiv.textContent = `Scanned: ${barcode}\nStatus: ${data.error}\nTime: ${new Date().toLocaleTimeString()}\n\n` + scansDiv.textContent;
-    } else {
-      scansDiv.textContent = `Scanned: ${barcode}\nStatus: ${data.package.currentPublicStatus}\nCustomer: ${data.package.customerName}\nRecipient: ${data.package.recipientName}\nDestination: ${data.package.destination}\nTime: ${new Date().toLocaleTimeString()}\n\n` + scansDiv.textContent;
+    const res = await fetch('/api/session/start',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({employee,location})
+    });
+    const data = await res.json();
+    if(res.ok){
+        sessionKey = data.sessionKey;
+        sessionActive = true;
+        document.getElementById('status').textContent = `Session ${sessionKey} started. Waiting for device...`;
+        document.getElementById('endSession').disabled = false;
+        alert(`Session key: ${sessionKey}. Give this to the device to connect.`);
     }
-    // Stop scanning automatically after one scan
-    window.removeEventListener('packageScanned', handleScan);
-    document.getElementById('startScanning').disabled = false;
-  });
-}
-
-// End Session
-document.getElementById('endSession').addEventListener('click', async () => {
-  if (!sessionActive) return alert("No active session");
-  const res = await fetch('/api/session/end', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionKey })
-  });
-  const data = await res.json();
-  if (res.ok) {
-    sessionActive = false;
-    deviceConnected = false;
-    scanningAllowed = false;
-    document.getElementById('status').textContent = `Session ${sessionKey} ended`;
-    document.getElementById('scans').textContent += "\nSession ended.";
-    document.getElementById('startScanning').disabled = true;
-    document.getElementById('connectDevice').disabled = true;
-    document.getElementById('endSession').disabled = true;
-  } else {
-    alert(data.error || "Failed to end session");
-  }
 });
+
+async function checkDeviceQueue(){
+    if(!sessionActive) return;
+    const res = await fetch(`/api/session/join`,{method:'GET'});
+    // For simplicity, this will be simulated later
+}
 </script>
 </body>
 </html>
