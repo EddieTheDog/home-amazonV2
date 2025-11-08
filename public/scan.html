@@ -1,56 +1,78 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Scanner Device</title>
-<style>
-body { font-family: Arial, sans-serif; margin: 20px; }
-input, button { margin: 5px; padding: 5px; }
-#status { font-weight: bold; margin-top: 10px; }
-</style>
+  <meta charset="UTF-8">
+  <title>Scan - Home Amazon V2</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    button { padding: 10px; margin: 5px; }
+  </style>
 </head>
 <body>
-<h1>Scanner Device</h1>
+  <h1>Scan Package</h1>
+  <div>
+    <label>Session Key: <input type="text" id="sessionKey" placeholder="A1" /></label>
+    <label>Device Name: <input type="text" id="deviceName" placeholder="Phone 1" /></label>
+    <button id="connectSession">Connect Session</button>
+  </div>
 
-<label>Session Key: <input type="text" id="sessionKey"></label>
-<label>Device Name: <input type="text" id="deviceName"></label>
-<button id="joinQueue">Join Queue</button>
-<div id="status">Not connected</div>
+  <video id="preview" width="300" height="200" style="display:none;"></video>
+  <p id="status"></p>
 
-<label>Scan Barcode:</label>
-<input type="text" id="barcodeInput" placeholder="Scan barcode here" disabled>
-<button id="sendScan" disabled>Send Scan</button>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <script>
+    let sessionKey = '';
+    let deviceName = '';
+    let connected = false;
+    let scanning = false;
 
-<script>
-let sessionConnected = false;
-let sessionKey = null;
+    document.getElementById('connectSession').addEventListener('click', () => {
+      sessionKey = document.getElementById('sessionKey').value.trim();
+      deviceName = document.getElementById('deviceName').value.trim();
+      if (!sessionKey || !deviceName) { alert("Fill session key and device name"); return; }
+      connected = true;
+      alert("Connected to session! Start scanning now.");
+      startScanner();
+    });
 
-document.getElementById('joinQueue').addEventListener('click', async () => {
-  sessionKey = document.getElementById('sessionKey').value.trim();
-  const deviceName = document.getElementById('deviceName').value.trim();
-  if(!sessionKey || !deviceName) return alert("Fill both fields");
+    function startScanner() {
+      const html5QrcodeScanner = new Html5Qrcode("preview");
+      document.getElementById("preview").style.display = "block";
 
-  const res = await fetch('/api/session/join', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({ sessionKey, deviceName })
-  });
-  const data = await res.json();
-  if(res.ok) {
-    document.getElementById('status').textContent = `Queued: ${deviceName}. Waiting for laptop to connect...`;
-    alert("Queued. Wait for laptop confirmation.");
-    document.getElementById('barcodeInput').disabled = false;
-    document.getElementById('sendScan').disabled = false;
-  } else alert(data.error);
-});
+      html5QrcodeScanner.start(
+        { facingMode: "environment" },
+        {
+          fps: 10,
+          qrbox: 250
+        },
+        async (decodedText, decodedResult) => {
+          if (!connected) return;
 
-document.getElementById('sendScan').addEventListener('click', () => {
-  if(!sessionKey) return alert("Not connected to session");
-  const barcode = document.getElementById('barcodeInput').value.trim();
-  if(!barcode) return alert("Scan a barcode");
-  window.dispatchEvent(new CustomEvent('packageScanned', { detail: { barcode } }));
-  document.getElementById('barcodeInput').value = '';
-});
-</script>
+          // Send scan to server
+          try {
+            await fetch('/api/package/scan', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                sessionKey,
+                barcode: decodedText,
+                action: "scanned",
+                location: "Warehouse",
+                employee: deviceName
+              })
+            });
+            document.getElementById('status').textContent = "Scanned: " + decodedText;
+          } catch (err) {
+            document.getElementById('status').textContent = "Error sending scan";
+          }
+
+          // Pause scanning for 1.5 sec cooldown
+          html5QrcodeScanner.pause(true);
+          setTimeout(() => html5QrcodeScanner.resume(), 1500);
+        },
+        (errorMessage) => { console.warn(errorMessage); }
+      ).catch(err => console.error(err));
+    }
+  </script>
 </body>
 </html>
