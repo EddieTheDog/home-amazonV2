@@ -1,35 +1,32 @@
 const express = require("express");
 const bodyParser = require("body-parser");
-const { v4: uuidv4 } = require("uuid");
 const fs = require("fs");
-
+const path = require("path");
 const app = express();
-const PORT = process.env.PORT || 3000;
-
 app.use(bodyParser.json());
 app.use(express.static("public"));
 
-// In-memory session store
-let activeSessions = {}; // { sessionKey: { employee, location, scans: [] } }
+const packagesFile = path.join(__dirname, "packages.json");
 
-// File storage for packages
-const PACKAGE_FILE = "packages.json";
-
+// --- Utility functions ---
 function readPackages() {
-  if (!fs.existsSync(PACKAGE_FILE)) return [];
-  return JSON.parse(fs.readFileSync(PACKAGE_FILE));
+  if (!fs.existsSync(packagesFile)) return [];
+  return JSON.parse(fs.readFileSync(packagesFile));
 }
 
-function writePackages(packages) {
-  fs.writeFileSync(PACKAGE_FILE, JSON.stringify(packages, null, 2));
+function writePackages(pkgs) {
+  fs.writeFileSync(packagesFile, JSON.stringify(pkgs, null, 2));
 }
 
-// Create package (front desk)
+// --- Session management ---
+let activeSessions = {}; // sessionKey -> { employee, location, scans: [] }
+
+// --- API: Create Package ---
 app.post("/api/package/create", (req, res) => {
   const { customerName, recipientName, destination } = req.body;
   const packages = readPackages();
-  const packageId = uuidv4().slice(0, 8);
-  const trackingNumber = Math.floor(100000 + Math.random() * 900000).toString();
+  const packageId = Math.random().toString(16).substr(2, 8);
+  const trackingNumber = Math.random().toString(36).substr(2, 8).toUpperCase();
   const pkg = {
     packageId,
     trackingNumber,
@@ -43,75 +40,74 @@ app.post("/api/package/create", (req, res) => {
         order: 1,
         locationName: "Front Desk",
         timestamp: new Date(),
-        publicStatus: "Order Created"
+        internalStatus: "created",
+        publicStatus: "Order Created",
+        notes: ""
       }
     ]
   };
   packages.push(pkg);
   writePackages(packages);
-
-  res.json({
-    message: "Package created",
-    package: pkg,
-    barcodeUrl: `/api/barcode/${packageId}`,
-    qrUrl: `/api/qrcode/${packageId}`
-  });
+  res.json({ message: "Package created", package: pkg });
 });
 
-// Start session
+// --- API: Start Session ---
 app.post("/api/session/start", (req, res) => {
   const { sessionKey, employee, location } = req.body;
-  if (!sessionKey || !employee || !location) return res.status(400).json({ error: "Missing fields" });
-  if (activeSessions[sessionKey]) return res.status(400).json({ error: "Session already exists" });
-
+  if (!sessionKey || !employee || !location)
+    return res.status(400).json({ error: "Missing required fields" });
   activeSessions[sessionKey] = { employee, location, scans: [] };
-  res.json({ message: `Session ${sessionKey} started`, session: activeSessions[sessionKey] });
+  res.json({ message: `Session ${sessionKey} started` });
 });
 
-// End session
+// --- API: End Session ---
 app.post("/api/session/end", (req, res) => {
   const { sessionKey } = req.body;
-  if (!activeSessions[sessionKey]) return res.status(404).json({ error: "Session not found" });
-
+  if (!sessionKey || !activeSessions[sessionKey])
+    return res.status(400).json({ error: "Session does not exist" });
   delete activeSessions[sessionKey];
   res.json({ message: `Session ${sessionKey} ended` });
 });
 
-// Scan package (phone)
+// --- API: Scan Package ---
 app.post("/api/package/scan", (req, res) => {
-  const { sessionKey, barcode, action, location, employee } = req.body;
+  const { sessionKey, barcode, action, location, employee, notes } = req.body;
   if (!sessionKey || !barcode || !action || !location || !employee)
     return res.status(400).json({ error: "Missing required fields" });
 
-  const session = activeSessions[sessionKey];
-  if (!session) return res.status(400).json({ error: "Session does not exist or ended" });
+  // Check if session exists
+  if (!activeSessions[sessionKey])
+    return res.status(400).json({ error: "Session does not exist or ended" });
 
   const packages = readPackages();
   const pkg = packages.find(p => p.packageId === barcode);
   if (!pkg) return res.status(404).json({ error: "Package not found" });
 
+  // Update package
+  pkg.currentPublicStatus = action;
   const checkpoint = {
     order: pkg.checkpoints.length + 1,
     locationName: location,
     timestamp: new Date(),
     scannedBy: employee,
     publicStatus: action,
+    notes: notes || "",
     sessionKey
   };
-
-  pkg.currentPublicStatus = action;
   pkg.checkpoints.push(checkpoint);
-  session.scans.push(checkpoint);
   writePackages(packages);
+
+  // Store scan in session
+  activeSessions[sessionKey].scans.push({ barcode, action, timestamp: new Date() });
 
   res.json({ message: "Package updated", package: pkg });
 });
 
-// Get scans for session (laptop live)
+// --- API: Get active session scans ---
 app.get("/api/session/:sessionKey/scans", (req, res) => {
   const session = activeSessions[req.params.sessionKey];
   if (!session) return res.status(404).json({ error: "Session not found" });
-  res.json(session.scans);
+  res.json({ scans: session.scans });
 });
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(3000, () => console.log("Server running on port 3000"));
