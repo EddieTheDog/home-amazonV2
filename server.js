@@ -1,7 +1,7 @@
-import express from "express";
-import bodyParser from "body-parser";
-import { v4 as uuidv4 } from "uuid";
-import fs from "fs";
+const express = require("express");
+const bodyParser = require("body-parser");
+const { v4: uuidv4 } = require("uuid");
+const fs = require("fs");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
