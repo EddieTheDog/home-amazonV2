@@ -122,6 +122,7 @@ app.post("/api/package/create", (req, res) => {
 app.post("/api/session/start", (req, res) => {
   const { sessionKey, employee, location } = req.body;
   if (!sessionKey || !employee || !location) return res.status(400).json({ error: "Missing fields" });
+  if (activeSessions[sessionKey]) return res.status(400).json({ error: "Session already exists" });
   activeSessions[sessionKey] = { employee, location, startedAt: new Date() };
   res.json({ message: "Session started", session: activeSessions[sessionKey] });
 });
@@ -132,6 +133,14 @@ app.post("/api/session/end", (req, res) => {
   if (!sessionKey || !activeSessions[sessionKey]) return res.status(400).json({ error: "Session not found" });
   delete activeSessions[sessionKey];
   res.json({ message: "Session ended" });
+});
+
+// Check if session exists
+app.post("/api/session/check", (req, res) => {
+  const { sessionKey } = req.body;
+  if (!sessionKey) return res.status(400).json({ error: "Missing sessionKey" });
+  if (!activeSessions[sessionKey]) return res.status(404).json({ error: "Session not found" });
+  res.json({ message: "Session exists", session: activeSessions[sessionKey] });
 });
 
 // Scan package (update status) – checks session exists
