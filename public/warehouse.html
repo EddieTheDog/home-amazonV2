@@ -2,22 +2,26 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Warehouse Scan</title>
-<script src="https://unpkg.com/html5-qrcode"></script>
+<title>Warehouse - Laptop</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; }
+h1 { color: #333; }
+label { display: block; margin: 8px 0; }
+input { padding: 5px; width: 250px; }
+button { padding: 6px 12px; margin-top: 10px; }
+#result { background: #f5f5f5; padding: 10px; margin-top: 10px; white-space: pre-wrap; }
+</style>
 </head>
 <body>
-<h1>Warehouse - Scan Package</h1>
+<h1>Warehouse - Laptop</h1>
 
-<label>Session Key: <input type="text" id="sessionKey"></label><br>
-<label>Employee: <input type="text" id="employee"></label><br>
-<label>Location: <input type="text" id="location"></label><br>
+<label>Session Key: <input type="text" id="sessionKey"></label>
+<label>Employee Name: <input type="text" id="employee"></label>
+<label>Location: <input type="text" id="location"></label>
 
-<h3>Manual Scan</h3>
-<label>Barcode: <input type="text" id="barcode"></label>
+<h2>Manual Scan</h2>
+<label>Barcode or Package ID: <input type="text" id="barcode"></label>
 <button id="manualScan">Scan</button>
-
-<h3>Camera Scan</h3>
-<div id="reader" style="width:300px;"></div>
 
 <pre id="result"></pre>
 
@@ -28,7 +32,7 @@ async function sendScan(barcode) {
   const sessionKey = document.getElementById('sessionKey').value;
   const employee = document.getElementById('employee').value;
   const location = document.getElementById('location').value;
-  if(!barcode || !sessionKey || !employee || !location) return;
+  if(!barcode || !sessionKey || !employee || !location) return alert("Fill all fields");
 
   const res = await fetch('/api/package/scan', {
     method: 'POST',
@@ -45,18 +49,10 @@ async function sendScan(barcode) {
   result.textContent = JSON.stringify(json.package, null, 2);
 }
 
-// Manual scan
 document.getElementById('manualScan').addEventListener('click', () => {
   const barcode = document.getElementById('barcode').value;
   sendScan(barcode);
 });
-
-// Camera scan
-new Html5Qrcode("reader").start(
-  { facingMode: "environment" },
-  { fps: 10, qrbox: 250 },
-  decodedText => sendScan(decodedText)
-);
 </script>
 </body>
 </html>
