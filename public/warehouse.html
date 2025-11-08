@@ -4,55 +4,90 @@
 <meta charset="UTF-8">
 <title>Warehouse - Laptop</title>
 <style>
-body { font-family: Arial; margin: 20px; }
-button { padding: 5px 10px; margin-right: 5px; margin-top: 5px; }
+body { font-family: Arial, sans-serif; margin: 20px; }
+button { margin: 5px; padding: 6px 12px; }
 #status { font-weight: bold; margin-top: 10px; }
-#scans { background:#f5f5f5; padding:10px; margin-top:20px; max-height:400px; overflow-y:auto; white-space:pre-wrap;}
+#scans { margin-top: 20px; max-height: 400px; overflow-y: auto; background: #f5f5f5; padding: 10px; white-space: pre-wrap; }
 </style>
 </head>
 <body>
 <h1>Warehouse - Laptop</h1>
 
-<label>Employee Name: <input type="text" id="employee"></label>
+<label>Employee: <input type="text" id="employee"></label>
 <label>Location: <input type="text" id="location"></label>
 <button id="generateSession">Generate Session</button>
+<button id="confirmDevice" disabled>Connect Device</button>
 <button id="startScanning" disabled>Start Scanning</button>
 <button id="endSession" disabled>End Session</button>
 
-<div id="status">No active session</div>
+<div id="status">No session</div>
 <div id="scans">Waiting for scans...</div>
 
 <script>
 let sessionKey = null;
-let deviceName = null;
-let sessionActive = false;
-let scanningActive = false;
+let scanning = false;
 
-document.getElementById('generateSession').addEventListener('click', async ()=>{
-    const employee = document.getElementById('employee').value.trim();
-    const location = document.getElementById('location').value.trim();
-    if(!employee || !location) return alert("Fill all fields");
+document.getElementById('generateSession').addEventListener('click', async () => {
+  const employee = document.getElementById('employee').value.trim();
+  const location = document.getElementById('location').value.trim();
+  if (!employee || !location) return alert("Fill fields");
 
-    const res = await fetch('/api/session/start',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({employee,location})
-    });
-    const data = await res.json();
-    if(res.ok){
-        sessionKey = data.sessionKey;
-        sessionActive = true;
-        document.getElementById('status').textContent = `Session ${sessionKey} started. Waiting for device...`;
-        document.getElementById('endSession').disabled = false;
-        alert(`Session key: ${sessionKey}. Give this to the device to connect.`);
-    }
+  const res = await fetch('/api/session/start', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ employee, location })
+  });
+  const data = await res.json();
+  if(res.ok) {
+    sessionKey = data.sessionKey;
+    document.getElementById('status').textContent = `Session ${sessionKey} created. Waiting for device...`;
+    document.getElementById('confirmDevice').disabled = false;
+    document.getElementById('endSession').disabled = false;
+  } else alert(data.error);
 });
 
-async function checkDeviceQueue(){
-    if(!sessionActive) return;
-    const res = await fetch(`/api/session/join`,{method:'GET'});
-    // For simplicity, this will be simulated later
-}
+document.getElementById('confirmDevice').addEventListener('click', async () => {
+  const res = await fetch('/api/session/connect', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ sessionKey }) });
+  const data = await res.json();
+  if(res.ok) {
+    alert(`Device ${data.deviceName} connected`);
+    document.getElementById('status').textContent = `Device ${data.deviceName} connected. Ready to scan.`;
+    document.getElementById('startScanning').disabled = false;
+    document.getElementById('confirmDevice').disabled = true;
+  } else alert(data.error);
+});
+
+document.getElementById('startScanning').addEventListener('click', () => {
+  scanning = true;
+  document.getElementById('status').textContent += " | Scanning started";
+});
+
+document.addEventListener('packageScanned', async (event) => {
+  if(!scanning) return;
+  scanning = false; // stop after one scan
+  const barcode = event.detail.barcode;
+
+  const employee = document.getElementById('employee').value;
+  const location = document.getElementById('location').value;
+
+  const res = await fetch('/api/package/scan', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ sessionKey, barcode, action:'scanned', location, employee })
+  });
+  const data = await res.json();
+  const scansDiv = document.getElementById('scans');
+  if(data.error) {
+    scansDiv.textContent = `Scanned: ${barcode}\nStatus: ${data.error}\nTime: ${new Date().toLocaleTimeString()}\n\n` + scansDiv.textContent;
+  } else {
+    scansDiv.textContent = `Scanned: ${barcode}\nStatus: ${data.package.currentPublicStatus}\nCustomer: ${data.package.customerName}\nRecipient: ${data.package.recipientName}\nDestination: ${data.package.destination}\nTime: ${new Date().toLocaleTimeString()}\n\n` + scansDiv.textContent;
+  }
+  document.getElementById('startScanning').disabled = false;
+});
+
+document.getElementById('endSession').addEventListener('click', async () => {
+  const res = await fetch('/api/session/end', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ sessionKey }) });
+  if(res.ok) document.getElementById('status').textContent = "Session ended";
+});
 </script>
 </body>
 </html>
